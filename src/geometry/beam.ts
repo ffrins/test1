@@ -97,15 +97,17 @@ export function buildBeam(p: BeamParams): BuiltGeometry {
     }
   }
 
-  // —— 4. 箍筋分布 ——
+  // —— 4. 箍筋分布（拆分加密 / 非加密两组） ——
   const denseZone = beamStirrupDenseZone(h, seismicLevel);
-  const xPositions: number[] = collectStirrupX(
-    leftSupport.width,
-    leftSupport.width + span,
+  const xL = leftSupport.width;
+  const xR = leftSupport.width + span;
+  const { dense: denseXs, sparse: sparseXs } = collectStirrupSplit(
+    xL,
+    xR,
     p.stirrup.spacingDense,
     p.stirrup.spacingSparse,
     denseZone,
-    50 // 距支座边起步 50mm
+    50
   );
 
   // 一根箍筋外轮廓 (闭合矩形 + 135° 斜弯钩)
@@ -115,33 +117,21 @@ export function buildBeam(p: BeamParams): BuiltGeometry {
   const innerYBot = cover + sd / 2;
   const hookLen = stirrupHookStraight(sd);
   // 弯钩 45° 方向 (向梁内)
-  const hookDx = (hookLen * Math.SQRT1_2);
-  // 在 YZ 平面 (x=0) 上画箍筋, 之后箍筋实例化只平移 x
-  const loop: [number, number, number][] = [
-    // 起点上左 + 弯钩
+  const hookDx = hookLen * Math.SQRT1_2;
+  const outerLoop: [number, number, number][] = [
     [0, innerYTop - hookDx, -halfB + hookDx],
     [0, innerYTop, -halfB],
-    // 上右
     [0, innerYTop, halfB],
-    // 下右
     [0, innerYBot, halfB],
-    // 下左
     [0, innerYBot, -halfB],
-    // 回到起点
     [0, innerYTop, -halfB],
-    // 终点弯钩
     [0, innerYTop - hookDx, -halfB + hookDx],
   ];
-  stirrups.push({
-    positions: xPositions,
-    loop,
-    diameter: sd,
-    grade: p.stirrup.grade,
-  });
+  stirrups.push({ positions: denseXs, loop: outerLoop, diameter: sd, grade: p.stirrup.grade, zone: 'dense' });
+  stirrups.push({ positions: sparseXs, loop: outerLoop, diameter: sd, grade: p.stirrup.grade, zone: 'sparse' });
 
   // —— 5. 复合箍 (4 肢: 内部增加一个小矩形抱住中间纵筋) ——
   if (p.stirrup.legs >= 4 && bot.count >= 4) {
-    // 内箍宽度: 取下部最外两根之间的中间两根之间距离
     const innerHalf = halfB / 2;
     const innerLoop: [number, number, number][] = [
       [0, innerYTop - hookDx, -innerHalf + hookDx],
@@ -152,17 +142,34 @@ export function buildBeam(p: BeamParams): BuiltGeometry {
       [0, innerYTop, -innerHalf],
       [0, innerYTop - hookDx, -innerHalf + hookDx],
     ];
-    stirrups.push({
-      positions: xPositions,
-      loop: innerLoop,
-      diameter: sd,
-      grade: p.stirrup.grade,
-    });
+    stirrups.push({ positions: denseXs, loop: innerLoop, diameter: sd, grade: p.stirrup.grade, zone: 'dense' });
+    stirrups.push({ positions: sparseXs, loop: innerLoop, diameter: sd, grade: p.stirrup.grade, zone: 'sparse' });
   }
+
+  // —— 6. 端部支座柱（仅作上下文，可视化梁端连接） ——
+  // 柱截面：宽 = leftSupport.width，进深 = max(b * 1.4, 400)，高度上下各 1.5h，让梁穿过
+  const colDepth = Math.max(b * 1.4, 400);
+  const colYmin = -h * 0.5;
+  const colYmax = h + h * 0.5;
+  const colH = colYmax - colYmin;
+  const colCenterY = (colYmax + colYmin) / 2;
+  const supports: BuiltGeometry['supports'] = [
+    {
+      size: [leftSupport.width, colH, colDepth],
+      center: [leftSupport.width / 2, colCenterY, 0],
+      label: '左支座柱',
+    },
+    {
+      size: [rightSupport.width, colH, colDepth],
+      center: [totalLen - rightSupport.width / 2, colCenterY, 0],
+      label: '右支座柱',
+    },
+  ];
 
   return {
     rebars,
     stirrups,
+    supports,
     concrete: {
       size: [totalLen, h, b],
       center: [totalLen / 2, h / 2, 0],
@@ -186,31 +193,32 @@ function distributeZ(
   return Array.from({ length: count }, (_, i) => left + i * step);
 }
 
-/** 按加密区分布生成箍筋 X 坐标 */
-function collectStirrupX(
-  xL: number, // 净跨左端 = leftSupport.width
+/** 按加密区分布生成箍筋 X 坐标，分别返回加密区与非加密区 */
+function collectStirrupSplit(
+  xL: number, // 净跨左端
   xR: number, // 净跨右端
   sDense: number,
   sSparse: number,
   denseZone: number,
   startOffset: number
-): number[] {
-  const out: number[] = [];
-  // 左加密区
+): { dense: number[]; sparse: number[] } {
+  const dense: number[] = [];
+  const sparse: number[] = [];
   let x = xL + startOffset;
+  // 左加密区
   while (x < xL + denseZone) {
-    out.push(x);
+    dense.push(x);
     x += sDense;
   }
   // 非加密区
   while (x < xR - denseZone) {
-    out.push(x);
+    sparse.push(x);
     x += sSparse;
   }
   // 右加密区
   while (x <= xR - startOffset) {
-    out.push(x);
+    dense.push(x);
     x += sDense;
   }
-  return out;
+  return { dense, sparse };
 }

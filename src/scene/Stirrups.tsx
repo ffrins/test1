@@ -8,6 +8,9 @@ const GRADE_COLOR: Record<string, string> = {
   HRB500: '#7c3aed',
 };
 
+/** 加密区高亮（暖色），让用户一眼识别 */
+const DENSE_COLOR = '#f59e0b';
+
 interface Props {
   shape: StirrupShape;
   /** 沿哪个轴布置实例: 'x' 用于梁, 'y' 用于柱 */
@@ -41,15 +44,24 @@ export function Stirrups({ shape, axis }: Props) {
     mesh.instanceMatrix.needsUpdate = true;
   }, [shape, axis]);
 
-  const color = GRADE_COLOR[shape.grade] ?? '#9ca3af';
+  const isDense = shape.zone === 'dense';
+  const color = isDense ? DENSE_COLOR : GRADE_COLOR[shape.grade] ?? '#9ca3af';
+
+  if (shape.positions.length === 0) return null;
 
   return (
     <instancedMesh
       ref={ref}
-      args={[geometry, undefined, Math.max(1, shape.positions.length)]}
+      args={[geometry, undefined, shape.positions.length]}
       castShadow
     >
-      <meshStandardMaterial color={color} metalness={0.6} roughness={0.5} />
+      <meshStandardMaterial
+        color={color}
+        metalness={0.6}
+        roughness={0.5}
+        emissive={isDense ? DENSE_COLOR : '#000000'}
+        emissiveIntensity={isDense ? 0.25 : 0}
+      />
     </instancedMesh>
   );
 }

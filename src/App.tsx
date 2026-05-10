@@ -1,53 +1,39 @@
 import { useStore } from '@/store/useStore';
 import { Viewer } from '@/scene/Viewer';
-import { BeamForm } from '@/ui/BeamForm';
-import { ColumnForm } from '@/ui/ColumnForm';
-import { PlainTextInput } from '@/ui/PlainTextInput';
-import { Inspector } from '@/ui/Inspector';
-import { ViewControls } from '@/ui/ViewControls';
+import { Header } from '@/ui/Header';
+import { StructuralTree } from '@/ui/StructuralTree';
+import { ViewportHUD } from '@/ui/ViewportHUD';
+import { CrossSection } from '@/ui/CrossSection';
+import { BOMTable } from '@/ui/BOMTable';
+import { DetailingInspector } from '@/ui/DetailingInspector';
+import { Gizmo } from '@/ui/Gizmo';
 
 export default function App() {
   const kind = useStore((s) => s.kind);
-  const setKind = useStore((s) => s.setKind);
+  const beam = useStore((s) => s.beam);
+  const column = useStore((s) => s.column);
+  const fileName = kind === 'beam' ? `${beam.id}.筋` : `${column.id}.筋`;
 
   return (
-    <div className="h-full grid grid-cols-[360px_1fr_300px]">
-      {/* 左侧：参数面板 */}
-      <aside className="border-r border-slate-800 overflow-y-auto p-3 space-y-3">
-        <div className="flex items-center justify-between">
-          <h1 className="text-base font-semibold">3D 钢筋平法</h1>
-          <span className="text-[10px] text-slate-500">22G101-1 · MVP</span>
-        </div>
-        <div className="flex gap-2">
-          <button className={'tab-btn ' + (kind === 'beam' ? 'active' : '')} onClick={() => setKind('beam')}>
-            梁 KL
-          </button>
-          <button className={'tab-btn ' + (kind === 'column' ? 'active' : '')} onClick={() => setKind('column')}>
-            柱 KZ
-          </button>
-        </div>
-
-        {kind === 'beam' && (
-          <>
-            <PlainTextInput />
-            <BeamForm />
-          </>
-        )}
-        {kind === 'column' && <ColumnForm />}
-      </aside>
-
-      {/* 中央：3D */}
-      <main className="relative">
-        <div className="absolute top-3 left-3 z-10 bg-slate-900/80 backdrop-blur rounded px-3 py-2 border border-slate-800">
-          <ViewControls />
-        </div>
-        <Viewer />
-      </main>
-
-      {/* 右侧：检查器 */}
-      <aside className="border-l border-slate-800 overflow-y-auto p-3">
-        <Inspector />
-      </aside>
+    <div className="flex flex-col h-screen text-on-surface bg-surface">
+      <Header fileName={fileName} />
+      <div className="flex flex-1 overflow-hidden">
+        <StructuralTree />
+        <main className="flex-1 flex flex-col min-w-0 bg-surface overflow-hidden">
+          {/* 上半：3D 视口 */}
+          <section className="flex-[3] relative border-b border-outline-variant/20 overflow-hidden">
+            <Viewer />
+            <ViewportHUD />
+            <Gizmo />
+          </section>
+          {/* 下半：截面 + BOM */}
+          <section className="flex-[2] flex bg-surface-container-lowest overflow-hidden min-h-0">
+            <CrossSection />
+            <BOMTable />
+          </section>
+        </main>
+        <DetailingInspector />
+      </div>
     </div>
   );
 }

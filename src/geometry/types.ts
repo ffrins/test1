@@ -16,6 +16,8 @@ export interface StirrupShape {
   loop: [number, number, number][];
   diameter: number;
   grade: RebarGrade;
+  /** 区段：加密 / 非加密（用于 3D 颜色区分） */
+  zone?: 'dense' | 'sparse';
 }
 
 export interface BeamParams {
@@ -75,4 +77,6 @@ export interface BuiltGeometry {
   rebars: RebarLine[];
   stirrups: StirrupShape[];
   concrete: { size: [number, number, number]; center: [number, number, number] };
+  /** 周边支座/相邻构件 (用于上下文显示，例如梁两端的柱) */
+  supports?: { size: [number, number, number]; center: [number, number, number]; label?: string }[];
 }

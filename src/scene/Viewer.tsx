@@ -1,5 +1,5 @@
 import { Canvas } from '@react-three/fiber';
-import { OrbitControls, Environment, GizmoHelper, GizmoViewport, Grid } from '@react-three/drei';
+import { OrbitControls, Environment, GizmoHelper, GizmoViewport } from '@react-three/drei';
 import { useMemo } from 'react';
 import * as THREE from 'three';
 import { useStore } from '@/store/useStore';
@@ -43,7 +43,7 @@ export function Viewer() {
       camera={{ position: [center[0] + camDist * 0.7, camDist * 0.6, camDist * 0.9], fov: 35, near: 1, far: camDist * 20 }}
       onPointerMissed={() => setSelected(null)}
     >
-      <color attach="background" args={['#0f172a']} />
+      <color attach="background" args={['#020617']} />
       <hemisphereLight args={['#dbeafe', '#1e293b', 0.6]} />
       <directionalLight
         position={[center[0] + camDist, camDist, camDist]}
@@ -55,21 +55,15 @@ export function Viewer() {
 
       <ClipContext planes={clippingPlanes}>
         {view.concrete !== 'hidden' && <Concrete {...built.concrete} />}
+        {view.concrete !== 'hidden' &&
+          built.supports?.map((s, i) => (
+            <Concrete key={`sp${i}`} size={s.size} center={s.center} />
+          ))}
         {view.showLongitudinal && built.rebars.map((r, i) => <Rebar key={i} rebar={r} />)}
         {view.showStirrups &&
           built.stirrups.map((s, i) => <Stirrups key={i} shape={s} axis={stirrupAxis} />)}
       </ClipContext>
 
-      <Grid
-        position={[center[0], 0, 0]}
-        args={[Math.max(dim[0], 4000) * 1.5, Math.max(dim[2], 2000) * 3]}
-        cellSize={100}
-        sectionSize={1000}
-        sectionColor="#475569"
-        cellColor="#334155"
-        fadeDistance={camDist * 5}
-        infiniteGrid
-      />
       <OrbitControls target={center} makeDefault />
       <GizmoHelper alignment="bottom-right" margin={[80, 80]}>
         <GizmoViewport labelColor="white" axisHeadScale={1} />

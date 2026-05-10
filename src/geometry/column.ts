@@ -66,16 +66,14 @@ export function buildColumn(p: ColumnParams): BuiltGeometry {
     });
   }
 
-  // —— 2. 箍筋分布 ——
+  // —— 2. 箍筋分布（拆分加密 / 非加密） ——
   const denseLen = columnStirrupDenseZone(Hn, h, p.isBottom);
-  const ys: number[] = [];
-  // 底部加密
+  const denseYs: number[] = [];
+  const sparseYs: number[] = [];
   let y = 50;
-  while (y < denseLen) { ys.push(y); y += p.stirrup.spacingDense; }
-  // 中部非加密
-  while (y < Hn - denseLen) { ys.push(y); y += p.stirrup.spacingSparse; }
-  // 顶部加密
-  while (y <= Hn - 50) { ys.push(y); y += p.stirrup.spacingDense; }
+  while (y < denseLen) { denseYs.push(y); y += p.stirrup.spacingDense; }
+  while (y < Hn - denseLen) { sparseYs.push(y); y += p.stirrup.spacingSparse; }
+  while (y <= Hn - 50) { denseYs.push(y); y += p.stirrup.spacingDense; }
 
   // 外箍闭合矩形 + 135° 弯钩
   const halfX = b / 2 - cover - sd / 2;
@@ -83,7 +81,7 @@ export function buildColumn(p: ColumnParams): BuiltGeometry {
   const hookLen = stirrupHookStraight(sd);
   const hookD = hookLen * Math.SQRT1_2;
   const loop: [number, number, number][] = [
-    [-halfX + hookD, 0, -halfZ + hookD], // 起弯钩
+    [-halfX + hookD, 0, -halfZ + hookD],
     [-halfX, 0, -halfZ],
     [halfX, 0, -halfZ],
     [halfX, 0, halfZ],
@@ -91,32 +89,23 @@ export function buildColumn(p: ColumnParams): BuiltGeometry {
     [-halfX, 0, -halfZ],
     [-halfX + hookD, 0, -halfZ + hookD],
   ];
-  stirrups.push({
-    positions: ys,
-    loop,
-    diameter: sd,
-    grade: p.stirrup.grade,
-  });
+  stirrups.push({ positions: denseYs, loop, diameter: sd, grade: p.stirrup.grade, zone: 'dense' });
+  stirrups.push({ positions: sparseYs, loop, diameter: sd, grade: p.stirrup.grade, zone: 'sparse' });
 
   // 复合箍 (井字: 加内部 H 边一道 + V 边一道)
   if (p.stirrup.composite === 'jing') {
     const innerHalfX = halfX / 2;
-    const innerHalfZ = halfZ / 2;
-    // 横向小箍
-    stirrups.push({
-      positions: ys,
-      loop: [
-        [-innerHalfX + hookD, 0, -halfZ + hookD],
-        [-innerHalfX, 0, -halfZ],
-        [innerHalfX, 0, -halfZ],
-        [innerHalfX, 0, halfZ],
-        [-innerHalfX, 0, halfZ],
-        [-innerHalfX, 0, -halfZ],
-        [-innerHalfX + hookD, 0, -halfZ + hookD],
-      ],
-      diameter: sd,
-      grade: p.stirrup.grade,
-    });
+    const innerLoop: [number, number, number][] = [
+      [-innerHalfX + hookD, 0, -halfZ + hookD],
+      [-innerHalfX, 0, -halfZ],
+      [innerHalfX, 0, -halfZ],
+      [innerHalfX, 0, halfZ],
+      [-innerHalfX, 0, halfZ],
+      [-innerHalfX, 0, -halfZ],
+      [-innerHalfX + hookD, 0, -halfZ + hookD],
+    ];
+    stirrups.push({ positions: denseYs, loop: innerLoop, diameter: sd, grade: p.stirrup.grade, zone: 'dense' });
+    stirrups.push({ positions: sparseYs, loop: innerLoop, diameter: sd, grade: p.stirrup.grade, zone: 'sparse' });
   }
 
   return {

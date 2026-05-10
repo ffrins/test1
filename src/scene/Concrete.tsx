@@ -20,17 +20,18 @@ export function Concrete({ size, center }: Props) {
     );
   }
 
-  // transparent (默认) 与 clip 都用半透明，clip 走全局 clipping (在 Viewer 中处理)
+  // 默认（transparent / clip）：实心混凝土质感，略带半透便于查看内部钢筋
   return (
     <mesh position={center} castShadow receiveShadow>
       <boxGeometry args={[w, h, d]} />
       <meshPhysicalMaterial
-        color="#d6d3d1"
-        roughness={0.85}
+        color="#c8c2b6"
+        roughness={0.95}
         metalness={0.0}
         transparent
-        opacity={0.28}
-        depthWrite={false}
+        opacity={0.78}
+        depthWrite
+        clearcoat={0.05}
       />
     </mesh>
   );
