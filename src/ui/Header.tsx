@@ -2,9 +2,10 @@ import { Icon } from './Icon';
 
 interface Props {
   fileName: string;
+  onOpenHelp?: () => void;
 }
 
-export function Header({ fileName }: Props) {
+export function Header({ fileName, onOpenHelp }: Props) {
   return (
     <header className="flex flex-col w-full bg-surface-container-low border-b border-outline-variant/30 shrink-0">
       <div className="flex justify-between items-center px-4 h-12">
@@ -30,6 +31,13 @@ export function Header({ fileName }: Props) {
             </span>
           </div>
           <div className="flex gap-1">
+            <button
+              onClick={onOpenHelp}
+              title="键盘快捷键 (?)"
+              className="p-1.5 hover:bg-surface-variant rounded transition-colors text-on-surface-variant hover:text-primary"
+            >
+              <Icon name="keyboard" className="!text-[20px]" />
+            </button>
             {['notifications', 'cloud_sync', 'settings'].map((n) => (
               <button
                 key={n}

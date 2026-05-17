@@ -1,9 +1,25 @@
 import { useStore } from '@/store/useStore';
 import { Icon } from './Icon';
+import { captureScreenshot } from '@/utils/screenshot';
+import { toast } from './Toast';
+import { exportCurrentBOM } from '@/utils/exportBom';
 
 export function ViewportHUD() {
   const view = useStore((s) => s.view);
   const setView = useStore((s) => s.setView);
+  const kind = useStore((s) => s.kind);
+  const beamId = useStore((s) => s.beam.id);
+  const columnId = useStore((s) => s.column.id);
+  const wallId = useStore((s) => s.wall.id);
+
+  const onShot = () => {
+    try {
+      captureScreenshot(kind === 'beam' ? beamId : kind === 'column' ? columnId : wallId);
+      toast.success('已导出截图');
+    } catch (e) {
+      toast.error(`截图失败:${(e as Error).message}`);
+    }
+  };
 
   return (
     <>
@@ -48,6 +64,10 @@ export function ViewportHUD() {
             onClick={() => setView({ showStirrups: !view.showStirrups })}
             title="箍筋"
           />
+        </div>
+        <div className="glass-panel p-1 rounded flex gap-1 shadow-2xl">
+          <HudBtn icon="photo_camera" onClick={onShot} title="截图 PNG (P)" />
+          <HudBtn icon="download" onClick={exportCurrentBOM} title="导出 BOM CSV (E)" />
         </div>
         <div className="glass-panel px-3 py-1 rounded flex items-center gap-4 shadow-2xl">
           <div className="flex items-center gap-1.5">

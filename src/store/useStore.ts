@@ -1,13 +1,14 @@
 import { create } from 'zustand';
-import { BeamParams, ColumnParams } from '@/geometry/types';
+import { BeamParams, ColumnParams, WallParams } from '@/geometry/types';
 
-export type MemberKind = 'beam' | 'column';
+export type MemberKind = 'beam' | 'column' | 'wall';
 export type ConcreteView = 'transparent' | 'wireframe' | 'hidden' | 'clip';
 
 interface AppState {
   kind: MemberKind;
   beam: BeamParams;
   column: ColumnParams;
+  wall: WallParams;
   view: {
     concrete: ConcreteView;
     showStirrups: boolean;
@@ -18,6 +19,7 @@ interface AppState {
   setKind: (k: MemberKind) => void;
   updateBeam: (patch: Partial<BeamParams>) => void;
   updateColumn: (patch: Partial<ColumnParams>) => void;
+  updateWall: (patch: Partial<WallParams>) => void;
   setView: (patch: Partial<AppState['view']>) => void;
   setSelected: (s: AppState['selected']) => void;
 }
@@ -65,10 +67,25 @@ const defaultColumn: ColumnParams = {
   isBottom: true,
 };
 
+const defaultWall: WallParams = {
+  id: 'Q1',
+  type: 'Q',
+  length: 4000,
+  height: 3600,
+  thickness: 200,
+  cover: 15,
+  concrete: 'C30',
+  seismicLevel: 2,
+  vertical: { grade: 'HRB400', diameter: 12, spacing: 200 },
+  horizontal: { grade: 'HRB400', diameter: 10, spacing: 200 },
+  tie: { grade: 'HPB300', diameter: 6, spacingX: 600, spacingY: 600, enabled: true },
+};
+
 export const useStore = create<AppState>((set) => ({
   kind: 'beam',
   beam: defaultBeam,
   column: defaultColumn,
+  wall: defaultWall,
   view: {
     concrete: 'transparent',
     showStirrups: true,
@@ -79,6 +96,7 @@ export const useStore = create<AppState>((set) => ({
   setKind: (k) => set({ kind: k, selected: null }),
   updateBeam: (patch) => set((s) => ({ beam: deepMerge(s.beam, patch) })),
   updateColumn: (patch) => set((s) => ({ column: deepMerge(s.column, patch) })),
+  updateWall: (patch) => set((s) => ({ wall: deepMerge(s.wall, patch) })),
   setView: (patch) => set((s) => ({ view: { ...s.view, ...patch } })),
   setSelected: (sel) => set({ selected: sel }),
 }));

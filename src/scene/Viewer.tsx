@@ -1,25 +1,29 @@
 import { Canvas } from '@react-three/fiber';
-import { OrbitControls, Environment, GizmoHelper, GizmoViewport } from '@react-three/drei';
+import { OrbitControls, GizmoHelper, GizmoViewport } from '@react-three/drei';
 import { useMemo } from 'react';
 import * as THREE from 'three';
 import { useStore } from '@/store/useStore';
 import { buildBeam } from '@/geometry/beam';
 import { buildColumn } from '@/geometry/column';
+import { buildWall } from '@/geometry/wall';
 import { Rebar } from './Rebar';
 import { Stirrups } from './Stirrups';
 import { Concrete } from './Concrete';
+import { bindRenderer } from '@/utils/screenshot';
 
 export function Viewer() {
   const kind = useStore((s) => s.kind);
   const beam = useStore((s) => s.beam);
   const column = useStore((s) => s.column);
+  const wall = useStore((s) => s.wall);
   const view = useStore((s) => s.view);
   const setSelected = useStore((s) => s.setSelected);
 
-  const built = useMemo(
-    () => (kind === 'beam' ? buildBeam(beam) : buildColumn(column)),
-    [kind, beam, column]
-  );
+  const built = useMemo(() => {
+    if (kind === 'beam') return buildBeam(beam);
+    if (kind === 'column') return buildColumn(column);
+    return buildWall(wall);
+  }, [kind, beam, column, wall]);
 
   // 居中相机 / Grid 大小
   const dim = built.concrete.size;
@@ -39,8 +43,9 @@ export function Viewer() {
   return (
     <Canvas
       shadows
-      gl={{ localClippingEnabled: true, antialias: true }}
+      gl={{ localClippingEnabled: true, antialias: true, preserveDrawingBuffer: true }}
       camera={{ position: [center[0] + camDist * 0.7, camDist * 0.6, camDist * 0.9], fov: 35, near: 1, far: camDist * 20 }}
+      onCreated={({ gl, scene, camera }) => bindRenderer(gl, scene, camera)}
       onPointerMissed={() => setSelected(null)}
     >
       <color attach="background" args={['#020617']} />
@@ -51,8 +56,6 @@ export function Viewer() {
         castShadow
         shadow-mapSize={[2048, 2048]}
       />
-      <Environment preset="warehouse" />
-
       <ClipContext planes={clippingPlanes}>
         {view.concrete !== 'hidden' && <Concrete {...built.concrete} />}
         {view.concrete !== 'hidden' &&

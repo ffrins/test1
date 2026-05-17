@@ -51,7 +51,13 @@ export function StructuralTree() {
               active={kind === 'column'}
               onClick={() => setKind('column')}
             />
-            <TreeLeaf icon="rectangle" label="墙" count={14} disabled />
+            <TreeLeaf
+              icon="rectangle"
+              label="墙"
+              count={14}
+              active={kind === 'wall'}
+              onClick={() => setKind('wall')}
+            />
           </div>
         </details>
 

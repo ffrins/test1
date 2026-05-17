@@ -99,3 +99,11 @@ input[type='range'] {
 /* —— 滚动条隐藏（非 webkit） —— */
 .scroll-thin::-webkit-scrollbar { width: 6px; height: 6px; }
 .scroll-thin::-webkit-scrollbar-thumb { background: rgba(135, 146, 154, 0.25); border-radius: 4px; }
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-fadeIn { animation: fadeIn 0.18s ease-out; }
+
+kbd { font-family: 'JetBrains Mono', ui-monospace, monospace; }

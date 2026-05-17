@@ -1,11 +1,14 @@
 import { useStore } from '@/store/useStore';
 import { Icon } from './Icon';
 
-/** 简化的 2D 截面图：根据当前梁/柱参数绘制混凝土框 + 钢筋点位 */
+/** 简化的 2D 截面图：根据当前梁/柱/墙参数绘制混凝土框 + 钢筋点位 */
 export function CrossSection() {
   const kind = useStore((s) => s.kind);
   const beam = useStore((s) => s.beam);
   const column = useStore((s) => s.column);
+  const wall = useStore((s) => s.wall);
+
+  if (kind === 'wall') return <WallSection />;
 
   const { b, h, cover, stirrupD, longTop, longBot, longD, label } = (() => {
     if (kind === 'beam') {
@@ -31,6 +34,8 @@ export function CrossSection() {
       label: `${column.id}  ${column.b}×${column.h}`,
     };
   })();
+  // 在闭包外引用避免 TS 警告
+  void wall;
 
   // 视口绘制：保持等比，留 padding
   const padding = 30;
@@ -109,6 +114,133 @@ export function CrossSection() {
             <line x1={x0 + bw + 7} y1={y0} x2={x0 + bw + 13} y2={y0} stroke="#87929a" strokeWidth="0.5" />
             <line x1={x0 + bw + 7} y1={y0 + hh} x2={x0 + bw + 13} y2={y0 + hh} stroke="#87929a" strokeWidth="0.5" />
             <text x={x0 + bw + 13} y={y0 + hh / 2 + 3}>{h}</text>
+          </g>
+        </svg>
+      </div>
+    </div>
+  );
+}
+
+/** 墙截面: 沿厚度 t × 长度 L 的横剖, 显示双排筋点 + 拉筋十字 */
+function WallSection() {
+  const w = useStore((s) => s.wall);
+  const padding = 30;
+  const W = 360;
+  const H = 160;
+  // 横放: 长度对应水平方向, 厚度对应垂直方向 (放大厚度便于可读)
+  const aspectScale = Math.min((W - padding * 2) / w.length, (H - padding * 2) / (w.thickness * 6));
+  const sL = aspectScale;
+  const sT = aspectScale * 6; // 厚度方向夸张 6 倍
+  const lw = w.length * sL;
+  const th = w.thickness * sT;
+  const x0 = (W - lw) / 2;
+  const y0 = (H - th) / 2;
+  const c = w.cover;
+  const dH = w.horizontal.diameter;
+  const dV = w.vertical.diameter;
+  const zHoriz = c + dH / 2;
+  const zVert = zHoriz + dH / 2 + dV / 2;
+
+  // 沿长度方向竖向筋分布
+  const usableX = w.length - 2 * (c + dV / 2);
+  const nV = Math.max(2, Math.floor(usableX / w.vertical.spacing) + 1);
+  const stepV = nV > 1 ? usableX / (nV - 1) : 0;
+  const vxs = Array.from({ length: nV }, (_, i) => x0 + (c + dV / 2 + i * stepV) * sL);
+
+  const rdV = Math.max(2, (dV / 2) * sT);
+  const rdH = Math.max(2, (dH / 2) * sT);
+
+  return (
+    <div className="flex-1 border-r border-outline-variant/10 flex flex-col min-w-0">
+      <div className="h-8 px-4 flex items-center justify-between border-b border-outline-variant/10 bg-surface-container-low shrink-0">
+        <span className="text-[11px] font-bold text-on-surface-variant tracking-wider">
+          墙截面 · {w.id} {w.length}×{w.thickness} · 厚度 6× 放大
+        </span>
+        <button className="text-on-surface-variant hover:text-primary">
+          <Icon name="fullscreen" className="!text-[16px]" />
+        </button>
+      </div>
+      <div className="flex-1 relative bg-[#020617]/50 p-4 flex items-center justify-center">
+        <svg viewBox={`0 0 ${W} ${H}`} width="100%" height="100%" preserveAspectRatio="xMidYMid meet">
+          {/* 混凝土 */}
+          <rect
+            x={x0}
+            y={y0}
+            width={lw}
+            height={th}
+            fill="rgba(141, 213, 255, 0.04)"
+            stroke="#8ed5ff"
+            strokeDasharray="4 2"
+            strokeWidth="1"
+          />
+          {/* 水平筋两侧(沿厚度方向投影为上下两条直线) */}
+          <line
+            x1={x0 + c * sL}
+            y1={y0 + zHoriz * sT}
+            x2={x0 + lw - c * sL}
+            y2={y0 + zHoriz * sT}
+            stroke="#bdc8d1"
+            strokeWidth="1"
+          />
+          <line
+            x1={x0 + c * sL}
+            y1={y0 + th - zHoriz * sT}
+            x2={x0 + lw - c * sL}
+            y2={y0 + th - zHoriz * sT}
+            stroke="#bdc8d1"
+            strokeWidth="1"
+          />
+          {/* 竖向筋点 (两排) */}
+          {vxs.map((cx, i) => (
+            <g key={i}>
+              <circle cx={cx} cy={y0 + zVert * sT} r={rdV} fill="#8ed5ff" />
+              <circle cx={cx} cy={y0 + th - zVert * sT} r={rdV} fill="#8ed5ff" />
+            </g>
+          ))}
+          {/* 水平筋点 (示意, 显示在两端) */}
+          <circle cx={x0 + c * sL + rdH} cy={y0 + zHoriz * sT} r={rdH} fill="#4edea3" />
+          <circle cx={x0 + lw - c * sL - rdH} cy={y0 + zHoriz * sT} r={rdH} fill="#4edea3" />
+          <circle cx={x0 + c * sL + rdH} cy={y0 + th - zHoriz * sT} r={rdH} fill="#4edea3" />
+          <circle cx={x0 + lw - c * sL - rdH} cy={y0 + th - zHoriz * sT} r={rdH} fill="#4edea3" />
+          {/* 拉筋(简化为厚度方向短线) */}
+          {w.tie.enabled &&
+            vxs
+              .filter((_, i) => i % 3 === 1)
+              .map((cx, i) => (
+                <line
+                  key={`tie${i}`}
+                  x1={cx}
+                  y1={y0 + zVert * sT}
+                  x2={cx}
+                  y2={y0 + th - zVert * sT}
+                  stroke="#f59e0b"
+                  strokeWidth="0.6"
+                />
+              ))}
+          {/* 标尺:长 L */}
+          <g fill="#87929a" fontSize="9" fontFamily="JetBrains Mono">
+            <line x1={x0} y1={y0 - 10} x2={x0 + lw} y2={y0 - 10} stroke="#87929a" strokeWidth="0.5" />
+            <line x1={x0} y1={y0 - 13} x2={x0} y2={y0 - 7} stroke="#87929a" strokeWidth="0.5" />
+            <line x1={x0 + lw} y1={y0 - 13} x2={x0 + lw} y2={y0 - 7} stroke="#87929a" strokeWidth="0.5" />
+            <text x={W / 2} y={y0 - 13} textAnchor="middle">L={w.length}</text>
+            {/* 厚 t */}
+            <line x1={x0 + lw + 10} y1={y0} x2={x0 + lw + 10} y2={y0 + th} stroke="#87929a" strokeWidth="0.5" />
+            <line x1={x0 + lw + 7} y1={y0} x2={x0 + lw + 13} y2={y0} stroke="#87929a" strokeWidth="0.5" />
+            <line x1={x0 + lw + 7} y1={y0 + th} x2={x0 + lw + 13} y2={y0 + th} stroke="#87929a" strokeWidth="0.5" />
+            <text x={x0 + lw + 13} y={y0 + th / 2 + 3}>t={w.thickness}</text>
+          </g>
+          {/* 图例 */}
+          <g fontSize="8" fontFamily="JetBrains Mono" fill="#87929a">
+            <circle cx={x0 + 8} cy={H - 14} r={3} fill="#8ed5ff" />
+            <text x={x0 + 16} y={H - 11}>竖向筋</text>
+            <circle cx={x0 + 70} cy={H - 14} r={3} fill="#4edea3" />
+            <text x={x0 + 78} y={H - 11}>水平筋</text>
+            {w.tie.enabled && (
+              <>
+                <line x1={x0 + 130} y1={H - 17} x2={x0 + 130} y2={H - 11} stroke="#f59e0b" strokeWidth="1" />
+                <text x={x0 + 136} y={H - 11}>拉筋</text>
+              </>
+            )}
           </g>
         </svg>
       </div>

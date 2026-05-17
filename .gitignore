@@ -8,3 +8,7 @@ dist-ssr
 *.log
 npm-debug.log*
 .idea
+# Vite 配置编辑时产生的临时文件
+vite.config.*.timestamp-*.mjs
+# TS 增量构建产物
+*.tsbuildinfo

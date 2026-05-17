@@ -73,6 +73,23 @@ export interface ColumnParams {
   isBottom: boolean;
 }
 
+export interface WallParams {
+  id: string;
+  type: 'Q';
+  length: number; // 墙长 L (mm)
+  height: number; // 墙高 H (mm)
+  thickness: number; // 墙厚 t (mm)
+  cover: number;
+  concrete: ConcreteGrade;
+  seismicLevel: SeismicLevel;
+  /** 竖向分布筋(双排) */
+  vertical: { grade: RebarGrade; diameter: number; spacing: number };
+  /** 水平分布筋(双排) */
+  horizontal: { grade: RebarGrade; diameter: number; spacing: number };
+  /** 拉筋: 梅花布置, 水平/竖向间距 */
+  tie: { grade: RebarGrade; diameter: number; spacingX: number; spacingY: number; enabled: boolean };
+}
+
 export interface BuiltGeometry {
   rebars: RebarLine[];
   stirrups: StirrupShape[];

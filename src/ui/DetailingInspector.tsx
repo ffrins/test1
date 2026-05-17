@@ -17,7 +17,9 @@ export function DetailingInspector() {
         </h2>
       </div>
       <div className="flex-1 px-5 py-4 space-y-6 overflow-y-auto scroll-thin">
-        {kind === 'beam' ? <BeamPanel /> : <ColumnPanel />}
+        {kind === 'beam' && <BeamPanel />}
+        {kind === 'column' && <ColumnPanel />}
+        {kind === 'wall' && <WallPanel />}
 
         {/* 选中钢筋信息 */}
         {sel && (
@@ -349,6 +351,141 @@ function ColumnPanel() {
             <option value="diamond">菱形（待实现）</option>
           </select>
         </label>
+      </section>
+    </>
+  );
+}
+
+function WallPanel() {
+  const w = useStore((s) => s.wall);
+  const update = useStore((s) => s.updateWall);
+  return (
+    <>
+      <section className="space-y-3">
+        <div className="section-caps">几何尺寸</div>
+        <div className="grid grid-cols-2 gap-3">
+          <NumField label="墙长 L" value={w.length} onChange={(v) => update({ length: v })} suffix="mm" />
+          <NumField label="墙高 H" value={w.height} onChange={(v) => update({ height: v })} suffix="mm" />
+          <NumField label="墙厚 t" value={w.thickness} onChange={(v) => update({ thickness: v })} suffix="mm" />
+          <NumField label="保护层 c" value={w.cover} onChange={(v) => update({ cover: v })} suffix="mm" />
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <label className="block">
+            <span className="field-label">混凝土</span>
+            <select
+              className="field-input appearance-none"
+              value={w.concrete}
+              onChange={(e) => update({ concrete: e.target.value as ConcreteGrade })}
+            >
+              {(['C25', 'C30', 'C35', 'C40', 'C45', 'C50'] as ConcreteGrade[]).map((x) => (
+                <option key={x} value={x}>{x}</option>
+              ))}
+            </select>
+          </label>
+          <label className="block">
+            <span className="field-label">抗震等级</span>
+            <select
+              className="field-input appearance-none"
+              value={String(w.seismicLevel)}
+              onChange={(e) =>
+                update({
+                  seismicLevel:
+                    e.target.value === 'null' ? null : (Number(e.target.value) as SeismicLevel),
+                })
+              }
+            >
+              <option value="1">一级</option>
+              <option value="2">二级</option>
+              <option value="3">三级</option>
+              <option value="4">四级</option>
+              <option value="null">非抗震</option>
+            </select>
+          </label>
+        </div>
+      </section>
+
+      <section className="space-y-3">
+        <div className="section-caps">竖向分布筋</div>
+        <div className="grid grid-cols-3 gap-2">
+          <NumField
+            label="直径"
+            value={w.vertical.diameter}
+            onChange={(v) => update({ vertical: { ...w.vertical, diameter: v } })}
+            suffix="mm"
+          />
+          <NumField
+            label="间距"
+            value={w.vertical.spacing}
+            onChange={(v) => update({ vertical: { ...w.vertical, spacing: v } })}
+            suffix="mm"
+          />
+          <label className="block">
+            <span className="field-label">等级</span>
+            <GradeSelect
+              value={w.vertical.grade}
+              onChange={(g) => update({ vertical: { ...w.vertical, grade: g } })}
+            />
+          </label>
+        </div>
+      </section>
+
+      <section className="space-y-3">
+        <div className="section-caps">水平分布筋</div>
+        <div className="grid grid-cols-3 gap-2">
+          <NumField
+            label="直径"
+            value={w.horizontal.diameter}
+            onChange={(v) => update({ horizontal: { ...w.horizontal, diameter: v } })}
+            suffix="mm"
+          />
+          <NumField
+            label="间距"
+            value={w.horizontal.spacing}
+            onChange={(v) => update({ horizontal: { ...w.horizontal, spacing: v } })}
+            suffix="mm"
+          />
+          <label className="block">
+            <span className="field-label">等级</span>
+            <GradeSelect
+              value={w.horizontal.grade}
+              onChange={(g) => update({ horizontal: { ...w.horizontal, grade: g } })}
+            />
+          </label>
+        </div>
+      </section>
+
+      <section className="space-y-3">
+        <div className="section-caps flex justify-between items-center">
+          <span>拉筋(梅花布置)</span>
+          <label className="flex items-center gap-1 normal-case tracking-normal cursor-pointer">
+            <input
+              type="checkbox"
+              checked={w.tie.enabled}
+              onChange={(e) => update({ tie: { ...w.tie, enabled: e.target.checked } })}
+            />
+            <span className="text-[10px] text-on-surface-variant">启用</span>
+          </label>
+        </div>
+        <div className="grid grid-cols-3 gap-2">
+          <NumField
+            label="直径"
+            value={w.tie.diameter}
+            onChange={(v) => update({ tie: { ...w.tie, diameter: v } })}
+            suffix="mm"
+          />
+          <NumField
+            label="水平间距"
+            value={w.tie.spacingX}
+            onChange={(v) => update({ tie: { ...w.tie, spacingX: v } })}
+            suffix="mm"
+          />
+          <NumField
+            label="竖向间距"
+            value={w.tie.spacingY}
+            onChange={(v) => update({ tie: { ...w.tie, spacingY: v } })}
+            suffix="mm"
+          />
+        </div>
       </section>
     </>
   );

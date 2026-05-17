@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useStore } from '@/store/useStore';
 import { Viewer } from '@/scene/Viewer';
 import { Header } from '@/ui/Header';
@@ -7,16 +8,25 @@ import { CrossSection } from '@/ui/CrossSection';
 import { BOMTable } from '@/ui/BOMTable';
 import { DetailingInspector } from '@/ui/DetailingInspector';
 import { Gizmo } from '@/ui/Gizmo';
+import { ToastHost } from '@/ui/Toast';
+import { ShortcutsHelp } from '@/ui/ShortcutsHelp';
+import { useGlobalHotkeys } from '@/utils/hotkeys';
+import { exportCurrentBOM } from '@/utils/exportBom';
 
 export default function App() {
   const kind = useStore((s) => s.kind);
   const beam = useStore((s) => s.beam);
   const column = useStore((s) => s.column);
-  const fileName = kind === 'beam' ? `${beam.id}.筋` : `${column.id}.筋`;
+  const wall = useStore((s) => s.wall);
+  const fileName =
+    kind === 'beam' ? `${beam.id}.筋` : kind === 'column' ? `${column.id}.筋` : `${wall.id}.筋`;
+  const [helpOpen, setHelpOpen] = useState(false);
+
+  useGlobalHotkeys(exportCurrentBOM, () => setHelpOpen(true));
 
   return (
     <div className="flex flex-col h-screen text-on-surface bg-surface">
-      <Header fileName={fileName} />
+      <Header fileName={fileName} onOpenHelp={() => setHelpOpen(true)} />
       <div className="flex flex-1 overflow-hidden">
         <StructuralTree />
         <main className="flex-1 flex flex-col min-w-0 bg-surface overflow-hidden">
@@ -34,6 +44,8 @@ export default function App() {
         </main>
         <DetailingInspector />
       </div>
+      <ToastHost />
+      <ShortcutsHelp open={helpOpen} onClose={() => setHelpOpen(false)} />
     </div>
   );
 }
