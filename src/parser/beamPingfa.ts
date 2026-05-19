@@ -26,11 +26,30 @@ export function parseBeamPingfa(input: string): ParseResult {
 
   // 编号 + 跨数
   const idMatch = text.match(/(KL|L|WKL|XL)\s*(\d+)\s*(?:\((\d+[AB]?)\))?/);
+  let declaredSpanCount = 0;
   if (idMatch) {
     patch.id = idMatch[1] + idMatch[2];
     patch.type = idMatch[1].startsWith('K') ? 'KL' : 'L';
+    if (idMatch[3]) {
+      const numPart = idMatch[3].replace(/[AB]/g, '');
+      declaredSpanCount = parseInt(numPart, 10) || 0;
+    }
   } else {
     warnings.push('未识别梁编号 (KLn/Ln)');
+  }
+
+  // 多跨净跨: 形如 "6000,6500,6000" 至少两段
+  const spansMatch = text.match(/(\d{4,5})(?:\s*,\s*\d{4,5}){1,}/);
+  if (spansMatch) {
+    const arr = spansMatch[0].split(/\s*,\s*/).map((n) => parseInt(n, 10));
+    patch.spans = arr;
+    patch.span = arr[0];
+    patch.interiorSupports = Array.from({ length: arr.length - 1 }, () => ({ width: 500 }));
+    if (declaredSpanCount && declaredSpanCount !== arr.length) {
+      warnings.push(`声明跨数 (${declaredSpanCount}) 与实际 (${arr.length}) 不一致,以实际为准`);
+    }
+  } else if (declaredSpanCount > 1) {
+    warnings.push(`声明 ${declaredSpanCount} 跨但未给出 Ln 列表,使用单跨默认`);
   }
 
   // 截面尺寸 b×h

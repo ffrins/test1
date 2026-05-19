@@ -6,7 +6,7 @@ export function StructuralTree() {
   const setKind = useStore((s) => s.setKind);
 
   return (
-    <aside className="flex flex-col h-full w-sidebar-width bg-surface-container-lowest/80 backdrop-blur-xl border-r border-outline-variant/20 shrink-0">
+    <aside data-tour="tree" className="flex flex-col h-full w-sidebar-width bg-surface-container-lowest/80 backdrop-blur-xl border-r border-outline-variant/20 shrink-0">
       <div className="p-4 border-b border-outline-variant/10">
         <div className="relative">
           <Icon name="search" className="!text-[18px] absolute left-2.5 top-2 text-outline" />

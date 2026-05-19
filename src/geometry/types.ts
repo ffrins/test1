@@ -23,9 +23,18 @@ export interface StirrupShape {
 export interface BeamParams {
   id: string;
   type: 'KL' | 'L';
-  span: number; // 净跨 Ln (mm)
+  /** 单跨净跨 Ln (mm)。当 spans 存在且非空时被忽略 */
+  span: number;
+  /** 多跨净跨数组。长度 ≥ 2 时启用多跨模式 */
+  spans?: number[];
+  /** 中间支座宽度数组。长度通常 = spans.length - 1; 不足时按 500mm 补齐 */
+  interiorSupports?: { width: number }[];
   b: number; // 截面宽
-  h: number; // 截面高
+  h: number; // 截面高(左端高)
+  /** 变截面: 右端高 h1。仅当存在且 != h 时启用渐变 */
+  h1?: number;
+  /** 截面过渡形式 */
+  transition?: 'linear' | 'step';
   cover: number; // 保护层 mm
   concrete: ConcreteGrade;
   seismicLevel: SeismicLevel;
@@ -35,6 +44,8 @@ export interface BeamParams {
   bottom: { grade: RebarGrade; diameter: number; count: number };
   // 侧面构造筋 G (每侧根数)
   sideG?: { grade: RebarGrade; diameter: number; countPerSide: number };
+  /** 支座负筋(仅多跨中间支座, 简化: 单排, 自支座中心向两侧延伸 max(Ln_l,Ln_r)/3) */
+  supportNeg?: { grade: RebarGrade; diameter: number; count: number };
   // 箍筋
   stirrup: {
     grade: RebarGrade;

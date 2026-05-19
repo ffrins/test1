@@ -34,6 +34,14 @@ const GROUPS: { title: string; items: [string, string][] }[] = [
     ],
   },
   {
+    title: '编辑',
+    items: [
+      ['Ctrl+Z', '撤销'],
+      ['Ctrl+Y', '重做'],
+      ['Ctrl+Shift+Z', '重做'],
+    ],
+  },
+  {
     title: '其他',
     items: [['? / /', '打开本帮助']],
   },

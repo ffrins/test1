@@ -1,11 +1,17 @@
+import { useStore } from '@/store/useStore';
 import { Icon } from './Icon';
 
 interface Props {
   fileName: string;
   onOpenHelp?: () => void;
+  onOpenDrawer?: () => void;
 }
 
-export function Header({ fileName, onOpenHelp }: Props) {
+export function Header({ fileName, onOpenHelp, onOpenDrawer }: Props) {
+  const canUndo = useStore((s) => s.canUndo);
+  const canRedo = useStore((s) => s.canRedo);
+  const undo = useStore((s) => s.undo);
+  const redo = useStore((s) => s.redo);
   return (
     <header className="flex flex-col w-full bg-surface-container-low border-b border-outline-variant/30 shrink-0">
       <div className="flex justify-between items-center px-4 h-12">
@@ -24,6 +30,24 @@ export function Header({ fileName, onOpenHelp }: Props) {
           </div>
         </div>
         <div className="flex items-center gap-4">
+          <div className="flex gap-0.5">
+            <button
+              onClick={undo}
+              disabled={!canUndo}
+              title="撤销 (Ctrl+Z)"
+              className="p-1.5 hover:bg-surface-variant rounded transition-colors text-on-surface-variant hover:text-primary disabled:opacity-30 disabled:pointer-events-none"
+            >
+              <Icon name="undo" className="!text-[20px]" />
+            </button>
+            <button
+              onClick={redo}
+              disabled={!canRedo}
+              title="重做 (Ctrl+Y)"
+              className="p-1.5 hover:bg-surface-variant rounded transition-colors text-on-surface-variant hover:text-primary disabled:opacity-30 disabled:pointer-events-none"
+            >
+              <Icon name="redo" className="!text-[20px]" />
+            </button>
+          </div>
           <div className="chip-success">
             <Icon name="check_circle" className="text-secondary !text-sm" filled />
             <span className="text-[11px] font-bold tracking-wider text-secondary">
@@ -37,6 +61,13 @@ export function Header({ fileName, onOpenHelp }: Props) {
               className="p-1.5 hover:bg-surface-variant rounded transition-colors text-on-surface-variant hover:text-primary"
             >
               <Icon name="keyboard" className="!text-[20px]" />
+            </button>
+            <button
+              onClick={onOpenDrawer}
+              title="帮助 · 规范速查"
+              className="p-1.5 hover:bg-surface-variant rounded transition-colors text-on-surface-variant hover:text-primary"
+            >
+              <Icon name="help" className="!text-[20px]" />
             </button>
             {['notifications', 'cloud_sync', 'settings'].map((n) => (
               <button

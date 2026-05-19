@@ -108,6 +108,25 @@ export function buildColumn(p: ColumnParams): BuiltGeometry {
     stirrups.push({ positions: sparseYs, loop: innerLoop, diameter: sd, grade: p.stirrup.grade, zone: 'sparse' });
   }
 
+  // 复合箍 (菱形: 沿截面对角线方向旋转 45° 的内菱形抱角)
+  if (p.stirrup.composite === 'diamond') {
+    // 菱形顶点取截面内圆相切位置(到边距相同)
+    const r = Math.min(halfX, halfZ) * 0.75;
+    // 弯钩起点取上顶点旁,沿对角线伸出
+    const hookOff = hookLen / 2; // 较小弯钩
+    const diamondLoop: [number, number, number][] = [
+      [0, 0, -r + hookOff], // 弯钩末端
+      [0, 0, -r],           // 上顶点(沿 z 负)
+      [r, 0, 0],            // 右顶点
+      [0, 0, r],            // 下顶点
+      [-r, 0, 0],           // 左顶点
+      [0, 0, -r],           // 回到上顶点
+      [0, 0, -r + hookOff], // 弯钩末端
+    ];
+    stirrups.push({ positions: denseYs, loop: diamondLoop, diameter: sd, grade: p.stirrup.grade, zone: 'dense' });
+    stirrups.push({ positions: sparseYs, loop: diamondLoop, diameter: sd, grade: p.stirrup.grade, zone: 'sparse' });
+  }
+
   return {
     rebars,
     stirrups,

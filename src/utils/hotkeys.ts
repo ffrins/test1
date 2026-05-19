@@ -21,8 +21,26 @@ export function useGlobalHotkeys(onExportCSV: () => void, onOpenHelp: () => void
         }
       }
 
-      // 不处理带修饰键的(留给浏览器/未来撤销重做)
-      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      // Ctrl/Cmd 修饰键: 仅处理 undo/redo
+      if (e.ctrlKey || e.metaKey) {
+        const s = useStore.getState();
+        const key = e.key.toLowerCase();
+        if (key === 'z' && !e.shiftKey) {
+          e.preventDefault();
+          s.undo();
+          toast.info('撤销');
+        } else if (key === 'z' && e.shiftKey) {
+          e.preventDefault();
+          s.redo();
+          toast.info('重做');
+        } else if (key === 'y') {
+          e.preventDefault();
+          s.redo();
+          toast.info('重做');
+        }
+        return;
+      }
+      if (e.altKey) return;
 
       const s = useStore.getState();
       const key = e.key.toLowerCase();

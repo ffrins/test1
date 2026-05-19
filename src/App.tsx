@@ -10,6 +10,8 @@ import { DetailingInspector } from '@/ui/DetailingInspector';
 import { Gizmo } from '@/ui/Gizmo';
 import { ToastHost } from '@/ui/Toast';
 import { ShortcutsHelp } from '@/ui/ShortcutsHelp';
+import { HelpDrawer } from '@/ui/HelpDrawer';
+import { OnboardingTooltip } from '@/ui/OnboardingTooltip';
 import { useGlobalHotkeys } from '@/utils/hotkeys';
 import { exportCurrentBOM } from '@/utils/exportBom';
 
@@ -21,17 +23,18 @@ export default function App() {
   const fileName =
     kind === 'beam' ? `${beam.id}.筋` : kind === 'column' ? `${column.id}.筋` : `${wall.id}.筋`;
   const [helpOpen, setHelpOpen] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
   useGlobalHotkeys(exportCurrentBOM, () => setHelpOpen(true));
 
   return (
     <div className="flex flex-col h-screen text-on-surface bg-surface">
-      <Header fileName={fileName} onOpenHelp={() => setHelpOpen(true)} />
+      <Header fileName={fileName} onOpenHelp={() => setHelpOpen(true)} onOpenDrawer={() => setDrawerOpen(true)} />
       <div className="flex flex-1 overflow-hidden">
         <StructuralTree />
         <main className="flex-1 flex flex-col min-w-0 bg-surface overflow-hidden">
           {/* 上半：3D 视口 */}
-          <section className="flex-[3] relative border-b border-outline-variant/20 overflow-hidden">
+          <section data-tour="viewer" className="flex-[3] relative border-b border-outline-variant/20 overflow-hidden">
             <Viewer />
             <ViewportHUD />
             <Gizmo />
@@ -46,6 +49,8 @@ export default function App() {
       </div>
       <ToastHost />
       <ShortcutsHelp open={helpOpen} onClose={() => setHelpOpen(false)} />
+      <HelpDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} />
+      <OnboardingTooltip />
     </div>
   );
 }

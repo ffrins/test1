@@ -9,75 +9,98 @@ import { BeamParams, BuiltGeometry, RebarLine, StirrupShape } from './types';
  *   Y: 竖直方向，0 = 梁底
  *   Z: 截面宽度方向，0 = 梁中
  *
- * 梁总长 = leftSupport + span + rightSupport
+ * 梁总长 = leftSupport + Σ spans + Σ interiorSupports.width + rightSupport
  */
 export function buildBeam(p: BeamParams): BuiltGeometry {
-  const { b, h, cover, span, leftSupport, rightSupport, seismicLevel } = p;
-  const totalLen = leftSupport.width + span + rightSupport.width;
+  // —— 归一化:把单跨/多跨统一成 spans[] + interior[] ——
+  const r = resolveSpans(p);
+  const { spans, interior, totalLen, spanRanges, supportRanges } = r;
+
+  const { b, h, cover, leftSupport, rightSupport, seismicLevel } = p;
+  const h1 = p.h1 ?? h;
+  const isVariable = Math.abs(h1 - h) > 1e-3;
+  // 沿 X 的梁高函数(线性渐变;阶梯过渡此处简化为线性,后续可改)
+  const hAt = (x: number): number => {
+    if (!isVariable) return h;
+    const t = Math.max(0, Math.min(1, x / totalLen));
+    if (p.transition === 'step') {
+      // 阶梯: 中点切换
+      return t < 0.5 ? h : h1;
+    }
+    return h + (h1 - h) * t;
+  };
 
   const rebars: RebarLine[] = [];
   const stirrups: StirrupShape[] = [];
 
   // —— 1. 上部通长筋 + 端支座弯锚 ——
-  // 弯锚: 水平段 ≥ 0.4 LabE, 弯钩段 15d 向下
   const top = p.topThrough;
   const labE = computeLabE(top.grade, p.concrete, top.diameter, seismicLevel);
   const hookV = 15 * top.diameter;
   const horizAnchor = Math.max(0.4 * labE, leftSupport.width - cover);
-  const yTop = h - cover - p.stirrup.diameter - top.diameter / 2;
-
-  // 上部钢筋在截面上沿 z 方向均匀分布
+  const yTopAt = (x: number) => hAt(x) - cover - p.stirrup.diameter - top.diameter / 2;
   const topZs = distributeZ(top.count, b, cover, p.stirrup.diameter, top.diameter);
   for (const z of topZs) {
     const xStart = leftSupport.width - horizAnchor;
-    const xEnd = leftSupport.width + span + rightSupport.width - (rightSupport.width - horizAnchor);
-    // 实际左侧弯锚: 从 xStart 起水平到内侧再向下 15d
-    const pts: [number, number, number][] = [
-      [xStart, yTop - hookV, z], // 左弯钩末端 (向下)
-      [xStart, yTop, z],         // 转折 (左)
-      [xEnd, yTop, z],           // 转折 (右)
-      [xEnd, yTop - hookV, z],   // 右弯钩末端
-    ];
+    const xEnd = totalLen - (rightSupport.width - horizAnchor);
+    const pts: [number, number, number][] = isVariable
+      ? sampleTopProfile(xStart, xEnd, yTopAt, z, hookV)
+      : [
+          [xStart, yTopAt(xStart) - hookV, z],
+          [xStart, yTopAt(xStart), z],
+          [xEnd, yTopAt(xEnd), z],
+          [xEnd, yTopAt(xEnd) - hookV, z],
+        ];
     rebars.push({
       grade: top.grade,
       diameter: top.diameter,
       points: pts,
       role: '上部通长筋',
-      length: (xEnd - xStart) + 2 * hookV,
+      length: polylineLen(pts),
     });
   }
 
-  // —— 2. 下部纵筋 + 端支座弯锚（向上 15d） ——
+  // —— 2. 下部纵筋(逐跨独立, 端跨入端支座, 中间支座搭接) ——
   const bot = p.bottom;
   const labEb = computeLabE(bot.grade, p.concrete, bot.diameter, seismicLevel);
   const hookVb = 15 * bot.diameter;
-  const horizAnchorB = Math.max(0.4 * labEb, leftSupport.width - cover);
   const yBot = cover + p.stirrup.diameter + bot.diameter / 2;
   const botZs = distributeZ(bot.count, b, cover, p.stirrup.diameter, bot.diameter);
-  for (const z of botZs) {
-    const xStart = leftSupport.width - horizAnchorB;
-    const xEnd = totalLen - (rightSupport.width - horizAnchorB);
-    const pts: [number, number, number][] = [
-      [xStart, yBot + hookVb, z],
-      [xStart, yBot, z],
-      [xEnd, yBot, z],
-      [xEnd, yBot + hookVb, z],
-    ];
-    rebars.push({
-      grade: bot.grade,
-      diameter: bot.diameter,
-      points: pts,
-      role: '下部纵筋',
-      length: (xEnd - xStart) + 2 * hookVb,
-    });
+  for (let si = 0; si < spans.length; si++) {
+    const [xL, xR] = spanRanges[si];
+    const isFirst = si === 0;
+    const isLast = si === spans.length - 1;
+    // 端跨锚入端支座, 中间跨锚入相邻中间支座(简化: 伸入支座 LaE)
+    const xStart = isFirst
+      ? leftSupport.width - Math.max(0.4 * labEb, leftSupport.width - cover)
+      : xL - labEb;
+    const xEnd = isLast
+      ? totalLen - (rightSupport.width - Math.max(0.4 * labEb, rightSupport.width - cover))
+      : xR + labEb;
+
+    for (const z of botZs) {
+      const pts: [number, number, number][] = [];
+      if (isFirst) pts.push([xStart, yBot + hookVb, z]); // 左端弯钩
+      pts.push([xStart, yBot, z]);
+      pts.push([xEnd, yBot, z]);
+      if (isLast) pts.push([xEnd, yBot + hookVb, z]); // 右端弯钩
+      rebars.push({
+        grade: bot.grade,
+        diameter: bot.diameter,
+        points: pts,
+        role: spans.length > 1 ? `第${si + 1}跨下部纵筋` : '下部纵筋',
+        length: polylineLen(pts),
+      });
+    }
   }
 
-  // —— 3. 侧面构造筋 G（贯通，端部不弯锚，简化伸入支座 15d） ——
+  // —— 3. 侧面构造筋 G(贯通整梁) ——
   if (p.sideG && p.sideG.countPerSide > 0) {
     const g = p.sideG;
     const ext = 15 * g.diameter;
-    const innerH = h - 2 * cover - 2 * p.stirrup.diameter;
-    // 在上下纵筋之间均匀分布
+    // 取梁中点高度作侧筋分布参考(变截面时按平均高)
+    const hMid = (h + h1) / 2;
+    const innerH = hMid - 2 * cover - 2 * p.stirrup.diameter;
     for (let side = -1; side <= 1; side += 2) {
       const z = side * (b / 2 - cover - p.stirrup.diameter - g.diameter / 2);
       for (let i = 1; i <= g.countPerSide; i++) {
@@ -97,84 +120,239 @@ export function buildBeam(p: BeamParams): BuiltGeometry {
     }
   }
 
-  // —— 4. 箍筋分布（拆分加密 / 非加密两组） ——
-  const denseZone = beamStirrupDenseZone(h, seismicLevel);
-  const xL = leftSupport.width;
-  const xR = leftSupport.width + span;
-  const { dense: denseXs, sparse: sparseXs } = collectStirrupSplit(
-    xL,
-    xR,
-    p.stirrup.spacingDense,
-    p.stirrup.spacingSparse,
-    denseZone,
-    50
-  );
-
-  // 一根箍筋外轮廓 (闭合矩形 + 135° 斜弯钩)
-  const sd = p.stirrup.diameter;
-  const halfB = b / 2 - cover - sd / 2;
-  const innerYTop = h - cover - sd / 2;
-  const innerYBot = cover + sd / 2;
-  const hookLen = stirrupHookStraight(sd);
-  // 弯钩 45° 方向 (向梁内)
-  const hookDx = hookLen * Math.SQRT1_2;
-  const outerLoop: [number, number, number][] = [
-    [0, innerYTop - hookDx, -halfB + hookDx],
-    [0, innerYTop, -halfB],
-    [0, innerYTop, halfB],
-    [0, innerYBot, halfB],
-    [0, innerYBot, -halfB],
-    [0, innerYTop, -halfB],
-    [0, innerYTop - hookDx, -halfB + hookDx],
-  ];
-  stirrups.push({ positions: denseXs, loop: outerLoop, diameter: sd, grade: p.stirrup.grade, zone: 'dense' });
-  stirrups.push({ positions: sparseXs, loop: outerLoop, diameter: sd, grade: p.stirrup.grade, zone: 'sparse' });
-
-  // —— 5. 复合箍 (4 肢: 内部增加一个小矩形抱住中间纵筋) ——
-  if (p.stirrup.legs >= 4 && bot.count >= 4) {
-    const innerHalf = halfB / 2;
-    const innerLoop: [number, number, number][] = [
-      [0, innerYTop - hookDx, -innerHalf + hookDx],
-      [0, innerYTop, -innerHalf],
-      [0, innerYTop, innerHalf],
-      [0, innerYBot, innerHalf],
-      [0, innerYBot, -innerHalf],
-      [0, innerYTop, -innerHalf],
-      [0, innerYTop - hookDx, -innerHalf + hookDx],
-    ];
-    stirrups.push({ positions: denseXs, loop: innerLoop, diameter: sd, grade: p.stirrup.grade, zone: 'dense' });
-    stirrups.push({ positions: sparseXs, loop: innerLoop, diameter: sd, grade: p.stirrup.grade, zone: 'sparse' });
+  // —— 4. 支座负筋(仅多跨中间支座) ——
+  if (spans.length >= 2 && p.supportNeg && p.supportNeg.count > 0) {
+    const sn = p.supportNeg;
+    const negZs = distributeZ(sn.count, b, cover, p.stirrup.diameter, sn.diameter);
+    for (let i = 0; i < interior.length; i++) {
+      const [sxL, sxR] = supportRanges[i + 1]; // supportRanges[0]=left end, [last]=right end
+      const xc = (sxL + sxR) / 2;
+      const lnL = spans[i];
+      const lnR = spans[i + 1];
+      const extend = Math.max(lnL, lnR) / 3;
+      const xStart = xc - extend;
+      const xEnd = xc + extend;
+      for (const z of negZs) {
+        const yT = yTopAt(xc);
+        const pts: [number, number, number][] = [
+          [xStart, yT, z],
+          [xEnd, yT, z],
+        ];
+        rebars.push({
+          grade: sn.grade,
+          diameter: sn.diameter,
+          points: pts,
+          role: `第${i + 1}支座负筋`,
+          length: xEnd - xStart,
+        });
+      }
+    }
   }
 
-  // —— 6. 端部支座柱（仅作上下文，可视化梁端连接） ——
-  // 柱截面：宽 = leftSupport.width，进深 = max(b * 1.4, 400)，高度上下各 1.5h，让梁穿过
-  const colDepth = Math.max(b * 1.4, 400);
-  const colYmin = -h * 0.5;
-  const colYmax = h + h * 0.5;
-  const colH = colYmax - colYmin;
-  const colCenterY = (colYmax + colYmin) / 2;
-  const supports: BuiltGeometry['supports'] = [
-    {
-      size: [leftSupport.width, colH, colDepth],
-      center: [leftSupport.width / 2, colCenterY, 0],
-      label: '左支座柱',
-    },
-    {
-      size: [rightSupport.width, colH, colDepth],
-      center: [totalLen - rightSupport.width / 2, colCenterY, 0],
-      label: '右支座柱',
-    },
-  ];
+  // —— 5. 箍筋(逐跨独立加密区, 变截面则每根 loop 独立) ——
+  const sd = p.stirrup.diameter;
+  const hookLen = stirrupHookStraight(sd);
+  const hookDx = hookLen * Math.SQRT1_2;
 
+  const allDense: number[] = [];
+  const allSparse: number[] = [];
+  for (let si = 0; si < spans.length; si++) {
+    const [xL, xR] = spanRanges[si];
+    const denseZone = beamStirrupDenseZone(hAt((xL + xR) / 2), seismicLevel);
+    const { dense, sparse } = collectStirrupSplit(
+      xL,
+      xR,
+      p.stirrup.spacingDense,
+      p.stirrup.spacingSparse,
+      denseZone,
+      50
+    );
+    allDense.push(...dense);
+    allSparse.push(...sparse);
+  }
+
+  const buildLoop = (hx: number): [number, number, number][] => {
+    const halfB = b / 2 - cover - sd / 2;
+    const innerYTop = hx - cover - sd / 2;
+    const innerYBot = cover + sd / 2;
+    return [
+      [0, innerYTop - hookDx, -halfB + hookDx],
+      [0, innerYTop, -halfB],
+      [0, innerYTop, halfB],
+      [0, innerYBot, halfB],
+      [0, innerYBot, -halfB],
+      [0, innerYTop, -halfB],
+      [0, innerYTop - hookDx, -halfB + hookDx],
+    ];
+  };
+
+  if (!isVariable) {
+    const outerLoop = buildLoop(h);
+    stirrups.push({ positions: allDense, loop: outerLoop, diameter: sd, grade: p.stirrup.grade, zone: 'dense' });
+    stirrups.push({ positions: allSparse, loop: outerLoop, diameter: sd, grade: p.stirrup.grade, zone: 'sparse' });
+  } else {
+    // 变截面:每根箍筋独立 loop(按其 x 处高度), 单独打 StirrupShape(positions=单元素)
+    for (const x of allDense) {
+      stirrups.push({
+        positions: [x],
+        loop: buildLoop(hAt(x)),
+        diameter: sd,
+        grade: p.stirrup.grade,
+        zone: 'dense',
+      });
+    }
+    for (const x of allSparse) {
+      stirrups.push({
+        positions: [x],
+        loop: buildLoop(hAt(x)),
+        diameter: sd,
+        grade: p.stirrup.grade,
+        zone: 'sparse',
+      });
+    }
+  }
+
+  // —— 6. 复合箍 (4 肢: 内部加小矩形, 变截面同步处理) ——
+  if (p.stirrup.legs >= 4 && bot.count >= 4) {
+    const buildInner = (hx: number): [number, number, number][] => {
+      const halfB = b / 2 - cover - sd / 2;
+      const innerHalf = halfB / 2;
+      const innerYTop = hx - cover - sd / 2;
+      const innerYBot = cover + sd / 2;
+      return [
+        [0, innerYTop - hookDx, -innerHalf + hookDx],
+        [0, innerYTop, -innerHalf],
+        [0, innerYTop, innerHalf],
+        [0, innerYBot, innerHalf],
+        [0, innerYBot, -innerHalf],
+        [0, innerYTop, -innerHalf],
+        [0, innerYTop - hookDx, -innerHalf + hookDx],
+      ];
+    };
+    if (!isVariable) {
+      const innerLoop = buildInner(h);
+      stirrups.push({ positions: allDense, loop: innerLoop, diameter: sd, grade: p.stirrup.grade, zone: 'dense' });
+      stirrups.push({ positions: allSparse, loop: innerLoop, diameter: sd, grade: p.stirrup.grade, zone: 'sparse' });
+    } else {
+      for (const x of allDense) {
+        stirrups.push({ positions: [x], loop: buildInner(hAt(x)), diameter: sd, grade: p.stirrup.grade, zone: 'dense' });
+      }
+      for (const x of allSparse) {
+        stirrups.push({ positions: [x], loop: buildInner(hAt(x)), diameter: sd, grade: p.stirrup.grade, zone: 'sparse' });
+      }
+    }
+  }
+
+  // —— 7. 支座上下文 (端柱 + 中间柱) ——
+  const colDepth = Math.max(b * 1.4, 400);
+  const supports: NonNullable<BuiltGeometry['supports']> = [];
+  // 左端
+  {
+    const [xL, xR] = supportRanges[0];
+    const hl = hAt(xL);
+    supports.push({
+      size: [xR - xL, hl * 2, colDepth],
+      center: [(xL + xR) / 2, hl / 2, 0],
+      label: '左支座柱',
+    });
+  }
+  // 中间
+  for (let i = 0; i < interior.length; i++) {
+    const [xL, xR] = supportRanges[i + 1];
+    const hx = hAt((xL + xR) / 2);
+    supports.push({
+      size: [xR - xL, hx * 2, colDepth],
+      center: [(xL + xR) / 2, hx / 2, 0],
+      label: `中间支座柱-${i + 1}`,
+    });
+  }
+  // 右端
+  {
+    const [xL, xR] = supportRanges[supportRanges.length - 1];
+    const hr = hAt(xR);
+    supports.push({
+      size: [xR - xL, hr * 2, colDepth],
+      center: [(xL + xR) / 2, hr / 2, 0],
+      label: '右支座柱',
+    });
+  }
+
+  // —— 混凝土包围盒(变截面取平均高;3D 渲染由 Concrete 自己处理) ——
+  const hMax = Math.max(h, h1);
   return {
     rebars,
     stirrups,
     supports,
     concrete: {
-      size: [totalLen, h, b],
-      center: [totalLen / 2, h / 2, 0],
+      size: [totalLen, hMax, b],
+      center: [totalLen / 2, hMax / 2, 0],
     },
   };
+}
+
+// —— 工具函数 ——
+
+interface ResolvedSpans {
+  spans: number[];
+  interior: { width: number }[];
+  totalLen: number;
+  /** 每跨净跨范围 [xL, xR] */
+  spanRanges: [number, number][];
+  /** 每段支座范围 [xL, xR],长度 = spans.length + 1 */
+  supportRanges: [number, number][];
+}
+
+function resolveSpans(p: BeamParams): ResolvedSpans {
+  const spans = p.spans && p.spans.length > 0 ? p.spans.slice() : [p.span];
+  const interior = (p.interiorSupports ?? []).slice();
+  while (interior.length < spans.length - 1) interior.push({ width: 500 });
+  if (interior.length > spans.length - 1) interior.length = spans.length - 1;
+
+  const supportRanges: [number, number][] = [];
+  const spanRanges: [number, number][] = [];
+  let x = 0;
+  supportRanges.push([x, x + p.leftSupport.width]);
+  x += p.leftSupport.width;
+  for (let i = 0; i < spans.length; i++) {
+    spanRanges.push([x, x + spans[i]]);
+    x += spans[i];
+    if (i < spans.length - 1) {
+      supportRanges.push([x, x + interior[i].width]);
+      x += interior[i].width;
+    }
+  }
+  supportRanges.push([x, x + p.rightSupport.width]);
+  x += p.rightSupport.width;
+  return { spans, interior, totalLen: x, spanRanges, supportRanges };
+}
+
+/** 变截面下顶筋按高度变化采样(每 500mm 一段) */
+function sampleTopProfile(
+  xStart: number,
+  xEnd: number,
+  yAt: (x: number) => number,
+  z: number,
+  hookV: number
+): [number, number, number][] {
+  const pts: [number, number, number][] = [];
+  pts.push([xStart, yAt(xStart) - hookV, z]);
+  const step = 500;
+  for (let x = xStart; x <= xEnd; x += step) {
+    pts.push([x, yAt(x), z]);
+  }
+  pts.push([xEnd, yAt(xEnd), z]);
+  pts.push([xEnd, yAt(xEnd) - hookV, z]);
+  return pts;
+}
+
+function polylineLen(pts: [number, number, number][]): number {
+  let l = 0;
+  for (let i = 1; i < pts.length; i++) {
+    const a = pts[i - 1];
+    const b = pts[i];
+    l += Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+  }
+  return l;
 }
 
 /** 截面 z 方向均布 */
@@ -195,8 +373,8 @@ function distributeZ(
 
 /** 按加密区分布生成箍筋 X 坐标，分别返回加密区与非加密区 */
 function collectStirrupSplit(
-  xL: number, // 净跨左端
-  xR: number, // 净跨右端
+  xL: number,
+  xR: number,
   sDense: number,
   sSparse: number,
   denseZone: number,
@@ -204,18 +382,17 @@ function collectStirrupSplit(
 ): { dense: number[]; sparse: number[] } {
   const dense: number[] = [];
   const sparse: number[] = [];
+  // 安全保护:避免无效间距导致死循环
+  if (sDense <= 0 || sSparse <= 0) return { dense, sparse };
   let x = xL + startOffset;
-  // 左加密区
-  while (x < xL + denseZone) {
+  while (x < xL + denseZone && x < xR) {
     dense.push(x);
     x += sDense;
   }
-  // 非加密区
   while (x < xR - denseZone) {
     sparse.push(x);
     x += sSparse;
   }
-  // 右加密区
   while (x <= xR - startOffset) {
     dense.push(x);
     x += sDense;

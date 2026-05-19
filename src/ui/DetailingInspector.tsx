@@ -1,7 +1,9 @@
 import { useStore } from '@/store/useStore';
 import { ConcreteGrade, RebarGrade, SeismicLevel } from '@/codes/rebar';
 import { parseBeamPingfa } from '@/parser/beamPingfa';
-import { useState } from 'react';
+import { validateBeam, validateColumn, validateWall } from '@/utils/validate';
+import { PINGFA_SAMPLES } from '@/data/pingfaSamples';
+import { useMemo, useState } from 'react';
 import { Icon } from './Icon';
 
 export function DetailingInspector() {
@@ -9,7 +11,7 @@ export function DetailingInspector() {
   const sel = useStore((s) => s.selected);
 
   return (
-    <aside className="w-inspector-width bg-surface-container-low/40 backdrop-blur-xl border-l border-outline-variant/20 flex flex-col shrink-0 h-full">
+    <aside data-tour="inspector" className="w-inspector-width bg-surface-container-low/40 backdrop-blur-xl border-l border-outline-variant/20 flex flex-col shrink-0 h-full">
       <div className="px-5 py-4 border-b border-outline-variant/10 shrink-0">
         <h2 className="text-base font-bold text-on-surface flex items-center gap-2">
           <Icon name="tune" className="text-primary" />
@@ -17,6 +19,7 @@ export function DetailingInspector() {
         </h2>
       </div>
       <div className="flex-1 px-5 py-4 space-y-6 overflow-y-auto scroll-thin">
+        <ValidationBanner />
         {kind === 'beam' && <BeamPanel />}
         {kind === 'column' && <ColumnPanel />}
         {kind === 'wall' && <WallPanel />}
@@ -38,25 +41,76 @@ export function DetailingInspector() {
           </section>
         )}
 
-        {/* Compliance */}
-        <section className="bg-secondary/5 border border-secondary/20 rounded p-4">
-          <div className="flex items-center gap-2 mb-2">
-            <Icon name="verified_user" className="text-secondary !text-[20px]" filled />
-            <span className="text-[11px] font-bold text-secondary tracking-widest">
-              规范校验
-            </span>
-          </div>
-          <p className="text-[11px] leading-relaxed text-on-surface-variant">
-            已按 <span className="text-on-surface font-semibold">GB50010-2010</span> 与{' '}
-            <span className="text-on-surface font-semibold">22G101-1</span> 校验：
-            搭接、锚固、加密区等参数满足抗震二级要求。
-          </p>
-        </section>
       </div>
 
       {/* AI Copilot */}
       <AIPanel />
     </aside>
+  );
+}
+
+function ValidationBanner() {
+  const kind = useStore((s) => s.kind);
+  const beam = useStore((s) => s.beam);
+  const column = useStore((s) => s.column);
+  const wall = useStore((s) => s.wall);
+  const result = useMemo(() => {
+    if (kind === 'beam') return validateBeam(beam);
+    if (kind === 'column') return validateColumn(column);
+    return validateWall(wall);
+  }, [kind, beam, column, wall]);
+
+  const [expanded, setExpanded] = useState(false);
+  const errCount = result.errors.length;
+  const warnCount = result.warnings.length;
+
+  if (errCount === 0 && warnCount === 0) {
+    return (
+      <section className="bg-secondary/5 border border-secondary/20 rounded p-3 flex items-center gap-2">
+        <Icon name="verified_user" className="text-secondary !text-[18px]" filled />
+        <span className="text-[12px] text-on-surface-variant">参数已通过 22G101-1 基础校验</span>
+      </section>
+    );
+  }
+
+  const tone = errCount > 0 ? 'error' : 'warning';
+  const bg = tone === 'error' ? 'bg-red-500/10 border-red-500/40' : 'bg-amber-500/10 border-amber-500/40';
+  const fg = tone === 'error' ? 'text-red-400' : 'text-amber-400';
+  const icon = tone === 'error' ? 'error' : 'warning';
+
+  return (
+    <section className={`rounded p-3 border ${bg}`}>
+      <button
+        className="w-full flex items-center gap-2 text-left"
+        onClick={() => setExpanded((v) => !v)}
+      >
+        <Icon name={icon} className={`!text-[18px] ${fg}`} filled />
+        <span className={`text-[12px] font-semibold ${fg}`}>
+          {errCount > 0 && `${errCount} 个错误`}
+          {errCount > 0 && warnCount > 0 && '  ·  '}
+          {warnCount > 0 && `${warnCount} 个警告`}
+        </span>
+        <span className="ml-auto text-[10px] text-on-surface-variant">
+          {expanded ? '收起' : '展开'}
+        </span>
+      </button>
+      {expanded && (
+        <ul className="mt-2 space-y-1 text-[11px] leading-snug">
+          {result.errors.map((e, i) => (
+            <li key={'e' + i} className="text-red-300 flex gap-1">
+              <span>•</span>
+              <span>{e}</span>
+            </li>
+          ))}
+          {result.warnings.map((w, i) => (
+            <li key={'w' + i} className="text-amber-300 flex gap-1">
+              <span>•</span>
+              <span>{w}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }
 
@@ -160,13 +214,31 @@ function BeamPanel() {
       <section className="space-y-3">
         <div className="section-caps">几何尺寸</div>
         <div className="grid grid-cols-2 gap-3">
-          <NumField label="净跨 Ln" value={beam.span} onChange={(v) => update({ span: v })} suffix="mm" />
           <NumField label="保护层 c" value={beam.cover} onChange={(v) => update({ cover: v })} suffix="mm" />
           <NumField label="截面 b" value={beam.b} onChange={(v) => update({ b: v })} suffix="mm" />
-          <NumField label="截面 h" value={beam.h} onChange={(v) => update({ h: v })} suffix="mm" />
+          <NumField label="左端 h" value={beam.h} onChange={(v) => update({ h: v })} suffix="mm" />
+          <NumField
+            label="右端 h₁"
+            value={beam.h1 ?? beam.h}
+            onChange={(v) => update({ h1: v === beam.h ? undefined : v })}
+            suffix="mm"
+          />
           <NumField label="左支座" value={beam.leftSupport.width} onChange={(v) => update({ leftSupport: { width: v } })} suffix="mm" />
           <NumField label="右支座" value={beam.rightSupport.width} onChange={(v) => update({ rightSupport: { width: v } })} suffix="mm" />
         </div>
+        {beam.h1 != null && beam.h1 !== beam.h && (
+          <label className="block">
+            <span className="field-label">过渡形式</span>
+            <select
+              className="field-input appearance-none"
+              value={beam.transition ?? 'linear'}
+              onChange={(e) => update({ transition: e.target.value as 'linear' | 'step' })}
+            >
+              <option value="linear">线性渐变</option>
+              <option value="step">中点阶梯</option>
+            </select>
+          </label>
+        )}
         <div className="grid grid-cols-2 gap-3">
           <label className="block">
             <span className="field-label">混凝土</span>
@@ -202,6 +274,8 @@ function BeamPanel() {
           </label>
         </div>
       </section>
+
+      <SpansEditor />
 
       <section className="space-y-3">
         <div className="section-caps">配筋参数</div>
@@ -263,8 +337,137 @@ function BeamPanel() {
             />
           </label>
         </div>
+        {(beam.spans?.length ?? 1) > 1 && (
+          <>
+            <div className="text-[11px] text-on-surface-variant pt-1">支座负筋(中间支座)</div>
+            <div className="grid grid-cols-3 gap-2">
+              <NumField
+                label="根数"
+                value={beam.supportNeg?.count ?? 2}
+                onChange={(v) =>
+                  update({
+                    supportNeg: {
+                      grade: beam.supportNeg?.grade ?? 'HRB400',
+                      diameter: beam.supportNeg?.diameter ?? 25,
+                      count: v,
+                    },
+                  })
+                }
+              />
+              <NumField
+                label="直径"
+                value={beam.supportNeg?.diameter ?? 25}
+                onChange={(v) =>
+                  update({
+                    supportNeg: {
+                      grade: beam.supportNeg?.grade ?? 'HRB400',
+                      count: beam.supportNeg?.count ?? 2,
+                      diameter: v,
+                    },
+                  })
+                }
+                suffix="mm"
+              />
+              <label className="block">
+                <span className="field-label">等级</span>
+                <GradeSelect
+                  value={beam.supportNeg?.grade ?? 'HRB400'}
+                  onChange={(g) =>
+                    update({
+                      supportNeg: {
+                        diameter: beam.supportNeg?.diameter ?? 25,
+                        count: beam.supportNeg?.count ?? 2,
+                        grade: g,
+                      },
+                    })
+                  }
+                />
+              </label>
+            </div>
+          </>
+        )}
       </section>
     </>
+  );
+}
+
+/** 多跨编辑器:展示每跨净跨 + 中间支座宽,支持 + / − */
+function SpansEditor() {
+  const beam = useStore((s) => s.beam);
+  const update = useStore((s) => s.updateBeam);
+  const spans = beam.spans && beam.spans.length > 0 ? beam.spans : [beam.span];
+  const interior = beam.interiorSupports ?? [];
+
+  const setSpan = (i: number, v: number) => {
+    const next = spans.slice();
+    next[i] = v;
+    update({ spans: next, span: next[0] });
+  };
+  const setInterior = (i: number, v: number) => {
+    const next = interior.slice();
+    while (next.length < spans.length - 1) next.push({ width: 500 });
+    next[i] = { width: v };
+    update({ interiorSupports: next });
+  };
+  const addSpan = () => {
+    const next = [...spans, spans[spans.length - 1] ?? 6000];
+    const ni = interior.slice();
+    while (ni.length < next.length - 1) ni.push({ width: 500 });
+    update({ spans: next, interiorSupports: ni });
+  };
+  const removeSpan = () => {
+    if (spans.length <= 1) return;
+    const next = spans.slice(0, -1);
+    const ni = interior.slice(0, -1);
+    update({
+      spans: next.length === 1 ? undefined : next,
+      interiorSupports: ni.length === 0 ? undefined : ni,
+      span: next[0],
+    });
+  };
+
+  return (
+    <section className="space-y-3">
+      <div className="section-caps flex justify-between items-center">
+        <span>跨设置({spans.length} 跨)</span>
+        <div className="flex gap-1 normal-case tracking-normal">
+          <button
+            className="p-1 rounded hover:bg-surface-variant/40 text-on-surface-variant disabled:opacity-30"
+            onClick={removeSpan}
+            disabled={spans.length <= 1}
+            title="删除最后一跨"
+          >
+            <Icon name="remove" className="!text-[16px]" />
+          </button>
+          <button
+            className="p-1 rounded hover:bg-surface-variant/40 text-primary"
+            onClick={addSpan}
+            title="添加一跨"
+          >
+            <Icon name="add" className="!text-[16px]" />
+          </button>
+        </div>
+      </div>
+      <div className="space-y-2">
+        {spans.map((s, i) => (
+          <div key={i} className="flex items-center gap-2">
+            <span className="w-10 text-[11px] text-outline shrink-0">第{i + 1}跨</span>
+            <NumField label="" value={s} onChange={(v) => setSpan(i, v)} suffix="mm" />
+            {i < spans.length - 1 && (
+              <>
+                <span className="text-[11px] text-outline shrink-0">支座</span>
+                <NumField
+                  label=""
+                  value={interior[i]?.width ?? 500}
+                  onChange={(v) => setInterior(i, v)}
+                  suffix="mm"
+                />
+              </>
+            )}
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -348,7 +551,7 @@ function ColumnPanel() {
           >
             <option value="rect">矩形单箍</option>
             <option value="jing">井字复合箍</option>
-            <option value="diamond">菱形（待实现）</option>
+            <option value="diamond">菱形抱角箍</option>
           </select>
         </label>
       </section>
@@ -500,9 +703,33 @@ function PingfaInput() {
     update(r.patch);
     setWarns(r.warnings);
   };
+  const beamSamples = PINGFA_SAMPLES.filter((s) => s.category !== '柱');
   return (
     <section className="space-y-2">
-      <div className="section-caps">平法标注</div>
+      <div className="section-caps flex justify-between items-center">
+        <span>平法标注</span>
+        <select
+          className="text-[10px] bg-surface-container border border-outline-variant/30 rounded px-1.5 py-0.5 text-on-surface-variant normal-case tracking-normal"
+          defaultValue=""
+          onChange={(e) => {
+            if (e.target.value) {
+              setText(e.target.value);
+              const r = parseBeamPingfa(e.target.value);
+              update(r.patch);
+              setWarns(r.warnings);
+            }
+          }}
+        >
+          <option value="" disabled>
+            示例…
+          </option>
+          {beamSamples.map((s, i) => (
+            <option key={i} value={s.text}>
+              {s.label}
+            </option>
+          ))}
+        </select>
+      </div>
       <textarea
         className="field-input font-mono !text-[11px] h-16 resize-none"
         value={text}

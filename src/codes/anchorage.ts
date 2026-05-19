@@ -17,6 +17,45 @@ export function zetaAE(level: SeismicLevel): number {
 }
 
 /**
+ * 受拉钢筋锚固长度修正系数 ζa (22G101-1 表 1.0.4-2)
+ *
+ * 影响因素:
+ *  - 直径 d > 25 时, ζa *= 1.10 (大直径)
+ *  - 环氧树脂涂层钢筋 ζa *= 1.25
+ *  - 施工扰动 ζa *= 1.10
+ *  - 锚固区保护层 c (c/d > 3 时 ζa *= 0.80, c/d > 5 时 *= 0.60)
+ *  - 末端机械锚固时返回 0.60 (替代直锚)
+ *
+ * 最小取 0.60 (机械锚固), 最大不超过 1.40 (多重不利)。
+ */
+export interface ZetaAOptions {
+  /** 钢筋直径 mm */
+  d?: number;
+  /** 锚固区净保护层 (mm), 用于计算 c/d */
+  c?: number;
+  /** 环氧树脂涂层 */
+  epoxy?: boolean;
+  /** 施工扰动 (例如桩头钢筋) */
+  disturbed?: boolean;
+  /** 末端机械锚固 (90° 弯钩 / 锚板) */
+  mechAnchor?: boolean;
+}
+
+export function zetaA(opt: ZetaAOptions = {}): number {
+  if (opt.mechAnchor) return 0.6;
+  let z = 1.0;
+  if (opt.d != null && opt.d > 25) z *= 1.1;
+  if (opt.epoxy) z *= 1.25;
+  if (opt.disturbed) z *= 1.1;
+  if (opt.c != null && opt.d != null && opt.d > 0) {
+    const r = opt.c / opt.d;
+    if (r >= 5) z *= 0.6;
+    else if (r >= 3) z *= 0.8;
+  }
+  return Math.max(0.6, Math.min(1.4, Number(z.toFixed(3))));
+}
+
+/**
  * 受拉钢筋基本锚固长度 (mm)
  */
 export function computeLab(
@@ -43,21 +82,25 @@ export function computeLabE(
 }
 
 /**
- * 受拉锚固 La (此处近似 ζa = 1.0; 一般工程已经是简化场景)
+ * 受拉锚固 La = ζa * Lab
+ * extra 未传时 ζa = 1.0 (与历史行为兼容)
  */
 export function computeLa(
   grade: RebarGrade,
   concrete: ConcreteGrade,
-  d: number
+  d: number,
+  extra?: ZetaAOptions
 ): number {
-  return computeLab(grade, concrete, d);
+  const za = extra ? zetaA({ d, ...extra }) : 1.0;
+  return Math.round(computeLab(grade, concrete, d) * za);
 }
 
 export function computeLaE(
   grade: RebarGrade,
   concrete: ConcreteGrade,
   d: number,
-  level: SeismicLevel
+  level: SeismicLevel,
+  extra?: ZetaAOptions
 ): number {
-  return Math.round(computeLa(grade, concrete, d) * zetaAE(level));
+  return Math.round(computeLa(grade, concrete, d, extra) * zetaAE(level));
 }
