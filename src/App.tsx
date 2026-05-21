@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useStore } from '@/store/useStore';
+import { LandingPage } from '@/ui/LandingPage';
 import { Viewer } from '@/scene/Viewer';
 import { Header } from '@/ui/Header';
 import { StructuralTree } from '@/ui/StructuralTree';
@@ -16,6 +17,7 @@ import { useGlobalHotkeys } from '@/utils/hotkeys';
 import { exportCurrentBOM } from '@/utils/exportBom';
 
 export default function App() {
+  const route = useStore((s) => s.route);
   const kind = useStore((s) => s.kind);
   const beam = useStore((s) => s.beam);
   const column = useStore((s) => s.column);
@@ -26,6 +28,8 @@ export default function App() {
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   useGlobalHotkeys(exportCurrentBOM, () => setHelpOpen(true));
+
+  if (route === 'landing') return <LandingPage />;
 
   return (
     <div className="flex flex-col h-screen text-on-surface bg-surface">

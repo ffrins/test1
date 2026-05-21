@@ -3,6 +3,7 @@ import { BeamParams, ColumnParams, WallParams } from '@/geometry/types';
 
 export type MemberKind = 'beam' | 'column' | 'wall';
 export type ConcreteView = 'transparent' | 'wireframe' | 'hidden' | 'clip';
+export type AppRoute = 'landing' | 'studio';
 
 /** 可撤销的数据快照(不含 view/selected 等 UI 状态) */
 interface Snapshot {
@@ -15,6 +16,7 @@ interface Snapshot {
 const MAX_HISTORY = 50;
 
 interface AppState {
+  route: AppRoute;
   kind: MemberKind;
   beam: BeamParams;
   column: ColumnParams;
@@ -41,6 +43,8 @@ interface AppState {
   updateWall: (patch: Partial<WallParams>) => void;
   setView: (patch: Partial<AppState['view']>) => void;
   setSelected: (s: AppState['selected']) => void;
+  goLanding: () => void;
+  goStudio: () => void;
 }
 
 const defaultBeam: BeamParams = {
@@ -115,6 +119,7 @@ function pushHistory(s: AppState): Partial<AppState> {
 }
 
 export const useStore = create<AppState>((set) => ({
+  route: 'landing',
   kind: 'beam',
   beam: defaultBeam,
   column: defaultColumn,
@@ -155,6 +160,8 @@ export const useStore = create<AppState>((set) => ({
   updateWall: (patch) => set((s) => ({ ...pushHistory(s), wall: deepMerge(s.wall, patch) })),
   setView: (patch) => set((s) => ({ view: { ...s.view, ...patch } })),
   setSelected: (sel) => set({ selected: sel }),
+  goLanding: () => set({ route: 'landing' }),
+  goStudio: () => set({ route: 'studio' }),
 }));
 
 function deepMerge<T>(base: T, patch: Partial<T>): T {

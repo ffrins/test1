@@ -1,6 +1,7 @@
 import { useStore } from '@/store/useStore';
 import { Icon } from './Icon';
 
+
 interface Props {
   fileName: string;
   onOpenHelp?: () => void;
@@ -12,14 +13,21 @@ export function Header({ fileName, onOpenHelp, onOpenDrawer }: Props) {
   const canRedo = useStore((s) => s.canRedo);
   const undo = useStore((s) => s.undo);
   const redo = useStore((s) => s.redo);
+  const goLanding = useStore((s) => s.goLanding);
   return (
     <header className="flex flex-col w-full bg-surface-container-low border-b border-outline-variant/30 shrink-0">
       <div className="flex justify-between items-center px-4 h-12">
         <div className="flex items-center gap-3">
-          <Icon name="architecture" className="text-primary !text-2xl" />
-          <span className="font-bold tracking-tight text-primary text-lg">
-            智筋 <span className="font-normal text-on-surface-variant">3D</span>
-          </span>
+          <button
+            onClick={goLanding}
+            title="返回首页"
+            className="flex items-center gap-2 hover:opacity-80 active:opacity-60 transition-opacity"
+          >
+            <Icon name="architecture" className="text-primary !text-2xl" />
+            <span className="font-bold tracking-tight text-primary text-lg">
+              智筋 <span className="font-normal text-on-surface-variant">3D</span>
+            </span>
+          </button>
           <div className="h-4 w-px bg-outline-variant mx-2" />
           <div className="flex items-center gap-1 text-xs font-medium text-on-surface-variant">
             <span>项目</span>

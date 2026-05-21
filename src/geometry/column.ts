@@ -1,6 +1,6 @@
 import { computeLabE } from '@/codes/anchorage';
-import { stirrupHookStraight } from '@/codes/rebar';
 import { columnStirrupDenseZone } from '@/codes/seismic';
+import { buildRectLoop, hookStraightLen } from './stirrupLoop';
 import { BuiltGeometry, ColumnParams, RebarLine, StirrupShape } from './types';
 
 /**
@@ -75,56 +75,59 @@ export function buildColumn(p: ColumnParams): BuiltGeometry {
   while (y < Hn - denseLen) { sparseYs.push(y); y += p.stirrup.spacingSparse; }
   while (y <= Hn - 50) { denseYs.push(y); y += p.stirrup.spacingDense; }
 
-  // 外箍闭合矩形 + 135° 弯钩
-  const halfX = b / 2 - cover - sd / 2;
-  const halfZ = h / 2 - cover - sd / 2;
-  const hookLen = stirrupHookStraight(sd);
-  const hookD = hookLen * Math.SQRT1_2;
-  const loop: [number, number, number][] = [
-    [-halfX + hookD, 0, -halfZ + hookD],
-    [-halfX, 0, -halfZ],
-    [halfX, 0, -halfZ],
-    [halfX, 0, halfZ],
-    [-halfX, 0, halfZ],
-    [-halfX, 0, -halfZ],
-    [-halfX + hookD, 0, -halfZ + hookD],
-  ];
-  stirrups.push({ positions: denseYs, loop, diameter: sd, grade: p.stirrup.grade, zone: 'dense' });
-  stirrups.push({ positions: sparseYs, loop, diameter: sd, grade: p.stirrup.grade, zone: 'sparse' });
+  // —— 箍筋几何 ——
+  // 柱坐标系: 箍筋 loop 点位于 XZ 平面(Y=0), 渲染时按 Y 方向 instancing
+  // buildRectLoop 返回 YZ 平面 loop(X=0), 这里需将其映射: loop 的 y→x, z→z
+  const sd_ = sd;
+  const hookLen = hookStraightLen(sd_);
+  const innerB = b - 2 * cover - sd_;
+  const innerH = h - 2 * cover - sd_;
 
-  // 复合箍 (井字: 加内部 H 边一道 + V 边一道)
+  // 把 stirrupLoop 模板(YZ平面)映射到柱的 XZ 平面: 点 [0, y, z] → [y - innerB/2, 0, z]
+  const remap = (loop: [number, number, number][]): [number, number, number][] =>
+    loop.map(([, y, z]) => [y - innerB / 2, 0, z]);
+
+  const outerLoop = remap(buildRectLoop(innerB, innerH, hookLen, 'LT'));
+  stirrups.push({ positions: denseYs, loop: outerLoop, diameter: sd_, grade: p.stirrup.grade, zone: 'dense' });
+  stirrups.push({ positions: sparseYs, loop: outerLoop, diameter: sd_, grade: p.stirrup.grade, zone: 'sparse' });
+
+  // 复合箍 (井字: 内部沿 b、h 各一道窄箍, 形成"井"字)
   if (p.stirrup.composite === 'jing') {
-    const innerHalfX = halfX / 2;
-    const innerLoop: [number, number, number][] = [
-      [-innerHalfX + hookD, 0, -halfZ + hookD],
-      [-innerHalfX, 0, -halfZ],
-      [innerHalfX, 0, -halfZ],
-      [innerHalfX, 0, halfZ],
-      [-innerHalfX, 0, halfZ],
-      [-innerHalfX, 0, -halfZ],
-      [-innerHalfX + hookD, 0, -halfZ + hookD],
-    ];
-    stirrups.push({ positions: denseYs, loop: innerLoop, diameter: sd, grade: p.stirrup.grade, zone: 'dense' });
-    stirrups.push({ positions: sparseYs, loop: innerLoop, diameter: sd, grade: p.stirrup.grade, zone: 'sparse' });
+    // b 方向窄箍: 宽 = innerB/2, 高 = innerH
+    const narrowB = remap(buildRectLoop(innerB / 2, innerH, hookLen, 'RB'));
+    stirrups.push({ positions: denseYs, loop: narrowB, diameter: sd_, grade: p.stirrup.grade, zone: 'dense' });
+    stirrups.push({ positions: sparseYs, loop: narrowB, diameter: sd_, grade: p.stirrup.grade, zone: 'sparse' });
+
+    // h 方向窄箍: 宽 = innerB, 高 = innerH/2 — 在 z 中部居中
+    const narrowH_template = buildRectLoop(innerB, innerH / 2, hookLen, 'LT');
+    // 该 loop 高度为 innerH/2, 需要把它在 y 方向上抬 innerH/4 居中(中段)
+    const shifted: [number, number, number][] = narrowH_template.map(
+      ([x, y, z]) => [x, y + innerH / 4, z]
+    );
+    const narrowH = remap(shifted);
+    stirrups.push({ positions: denseYs, loop: narrowH, diameter: sd_, grade: p.stirrup.grade, zone: 'dense' });
+    stirrups.push({ positions: sparseYs, loop: narrowH, diameter: sd_, grade: p.stirrup.grade, zone: 'sparse' });
   }
 
-  // 复合箍 (菱形: 沿截面对角线方向旋转 45° 的内菱形抱角)
+  // 复合箍 (菱形: 旋转 45° 抱角箍, 折线闭合, 弯钩朝顶点外侧)
   if (p.stirrup.composite === 'diamond') {
-    // 菱形顶点取截面内圆相切位置(到边距相同)
+    const halfX = innerB / 2;
+    const halfZ = innerH / 2;
     const r = Math.min(halfX, halfZ) * 0.75;
-    // 弯钩起点取上顶点旁,沿对角线伸出
-    const hookOff = hookLen / 2; // 较小弯钩
+    const hookOff = hookLen * Math.SQRT1_2;
+    // 上顶点 (-z 方向) 处放置弯钩, 两个钩沿对角线斜向截面中心
+    // 折线: 钩末端 → 上顶点 → 右顶点 → 下顶点 → 左顶点 → 上顶点(闭合) → 钩末端
     const diamondLoop: [number, number, number][] = [
-      [0, 0, -r + hookOff], // 弯钩末端
-      [0, 0, -r],           // 上顶点(沿 z 负)
+      [0, 0, -r + hookOff], // 钩末端 (向中心稍偏)
+      [0, 0, -r],           // 上顶点
       [r, 0, 0],            // 右顶点
       [0, 0, r],            // 下顶点
       [-r, 0, 0],           // 左顶点
-      [0, 0, -r],           // 回到上顶点
-      [0, 0, -r + hookOff], // 弯钩末端
+      [0, 0, -r],           // 闭合回上顶点
+      [hookOff * 0.5, 0, -r + hookOff * 0.5], // 第二钩末端(略偏 x 避免重合)
     ];
-    stirrups.push({ positions: denseYs, loop: diamondLoop, diameter: sd, grade: p.stirrup.grade, zone: 'dense' });
-    stirrups.push({ positions: sparseYs, loop: diamondLoop, diameter: sd, grade: p.stirrup.grade, zone: 'sparse' });
+    stirrups.push({ positions: denseYs, loop: diamondLoop, diameter: sd_, grade: p.stirrup.grade, zone: 'dense' });
+    stirrups.push({ positions: sparseYs, loop: diamondLoop, diameter: sd_, grade: p.stirrup.grade, zone: 'sparse' });
   }
 
   return {

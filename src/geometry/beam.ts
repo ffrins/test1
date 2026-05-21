@@ -1,6 +1,6 @@
 import { computeLabE } from '@/codes/anchorage';
-import { stirrupHookStraight } from '@/codes/rebar';
 import { beamStirrupDenseZone } from '@/codes/seismic';
+import { buildBeamStirrupShapes } from './stirrupLoop';
 import { BeamParams, BuiltGeometry, RebarLine, StirrupShape } from './types';
 
 /**
@@ -149,10 +149,8 @@ export function buildBeam(p: BeamParams): BuiltGeometry {
     }
   }
 
-  // —— 5. 箍筋(逐跨独立加密区, 变截面则每根 loop 独立) ——
+  // —— 5. 箍筋(逐跨独立加密区, 含多肢复合箍) ——
   const sd = p.stirrup.diameter;
-  const hookLen = stirrupHookStraight(sd);
-  const hookDx = hookLen * Math.SQRT1_2;
 
   const allDense: number[] = [];
   const allSparse: number[] = [];
@@ -171,75 +169,28 @@ export function buildBeam(p: BeamParams): BuiltGeometry {
     allSparse.push(...sparse);
   }
 
-  const buildLoop = (hx: number): [number, number, number][] => {
-    const halfB = b / 2 - cover - sd / 2;
-    const innerYTop = hx - cover - sd / 2;
-    const innerYBot = cover + sd / 2;
-    return [
-      [0, innerYTop - hookDx, -halfB + hookDx],
-      [0, innerYTop, -halfB],
-      [0, innerYTop, halfB],
-      [0, innerYBot, halfB],
-      [0, innerYBot, -halfB],
-      [0, innerYTop, -halfB],
-      [0, innerYTop - hookDx, -halfB + hookDx],
-    ];
-  };
-
   if (!isVariable) {
-    const outerLoop = buildLoop(h);
-    stirrups.push({ positions: allDense, loop: outerLoop, diameter: sd, grade: p.stirrup.grade, zone: 'dense' });
-    stirrups.push({ positions: allSparse, loop: outerLoop, diameter: sd, grade: p.stirrup.grade, zone: 'sparse' });
+    // 等截面：所有箍筋共享同一组 loop
+    const shapes = buildBeamStirrupShapes(
+      p.stirrup.legs, b, h, cover, sd, p.stirrup.grade,
+      allDense, allSparse
+    );
+    stirrups.push(...shapes);
   } else {
-    // 变截面:每根箍筋独立 loop(按其 x 处高度), 单独打 StirrupShape(positions=单元素)
+    // 变截面：每根箍筋按其 x 处高度独立生成 loop
     for (const x of allDense) {
-      stirrups.push({
-        positions: [x],
-        loop: buildLoop(hAt(x)),
-        diameter: sd,
-        grade: p.stirrup.grade,
-        zone: 'dense',
-      });
+      const shapes = buildBeamStirrupShapes(
+        p.stirrup.legs, b, hAt(x), cover, sd, p.stirrup.grade,
+        [x], []
+      );
+      stirrups.push(...shapes);
     }
     for (const x of allSparse) {
-      stirrups.push({
-        positions: [x],
-        loop: buildLoop(hAt(x)),
-        diameter: sd,
-        grade: p.stirrup.grade,
-        zone: 'sparse',
-      });
-    }
-  }
-
-  // —— 6. 复合箍 (4 肢: 内部加小矩形, 变截面同步处理) ——
-  if (p.stirrup.legs >= 4 && bot.count >= 4) {
-    const buildInner = (hx: number): [number, number, number][] => {
-      const halfB = b / 2 - cover - sd / 2;
-      const innerHalf = halfB / 2;
-      const innerYTop = hx - cover - sd / 2;
-      const innerYBot = cover + sd / 2;
-      return [
-        [0, innerYTop - hookDx, -innerHalf + hookDx],
-        [0, innerYTop, -innerHalf],
-        [0, innerYTop, innerHalf],
-        [0, innerYBot, innerHalf],
-        [0, innerYBot, -innerHalf],
-        [0, innerYTop, -innerHalf],
-        [0, innerYTop - hookDx, -innerHalf + hookDx],
-      ];
-    };
-    if (!isVariable) {
-      const innerLoop = buildInner(h);
-      stirrups.push({ positions: allDense, loop: innerLoop, diameter: sd, grade: p.stirrup.grade, zone: 'dense' });
-      stirrups.push({ positions: allSparse, loop: innerLoop, diameter: sd, grade: p.stirrup.grade, zone: 'sparse' });
-    } else {
-      for (const x of allDense) {
-        stirrups.push({ positions: [x], loop: buildInner(hAt(x)), diameter: sd, grade: p.stirrup.grade, zone: 'dense' });
-      }
-      for (const x of allSparse) {
-        stirrups.push({ positions: [x], loop: buildInner(hAt(x)), diameter: sd, grade: p.stirrup.grade, zone: 'sparse' });
-      }
+      const shapes = buildBeamStirrupShapes(
+        p.stirrup.legs, b, hAt(x), cover, sd, p.stirrup.grade,
+        [], [x]
+      );
+      stirrups.push(...shapes);
     }
   }
 
