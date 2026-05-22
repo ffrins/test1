@@ -1,4 +1,5 @@
 import { useStore } from '@/store/useStore';
+import { useAIStore } from '@/ai/store/ai-store';
 import { Icon } from './Icon';
 
 
@@ -14,6 +15,8 @@ export function Header({ fileName, onOpenHelp, onOpenDrawer }: Props) {
   const undo = useStore((s) => s.undo);
   const redo = useStore((s) => s.redo);
   const goLanding = useStore((s) => s.goLanding);
+  const toggleAI = useAIStore((s) => s.togglePanel);
+  const aiOpen = useAIStore((s) => s.open);
   return (
     <header className="flex flex-col w-full bg-surface-container-low border-b border-outline-variant/30 shrink-0">
       <div className="flex justify-between items-center px-4 h-12">
@@ -86,6 +89,18 @@ export function Header({ fileName, onOpenHelp, onOpenDrawer }: Props) {
               </button>
             ))}
           </div>
+          <button
+            onClick={toggleAI}
+            title="开启/关闭 AI 助手"
+            className={`flex items-center gap-1 px-3 py-1.5 rounded text-xs font-bold border transition-colors ${
+              aiOpen
+                ? 'bg-primary text-on-primary border-primary'
+                : 'bg-primary/10 text-primary border-primary/30 hover:bg-primary/20'
+            }`}
+          >
+            <Icon name="auto_awesome" className="!text-[16px]" />
+            AI 助手
+          </button>
           <button className="btn-primary">同步模型</button>
         </div>
       </div>

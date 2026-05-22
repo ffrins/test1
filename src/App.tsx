@@ -13,6 +13,7 @@ import { ToastHost } from '@/ui/Toast';
 import { ShortcutsHelp } from '@/ui/ShortcutsHelp';
 import { HelpDrawer } from '@/ui/HelpDrawer';
 import { OnboardingTooltip } from '@/ui/OnboardingTooltip';
+import { ChatPanel } from '@/ai/components/ChatPanel';
 import { useGlobalHotkeys } from '@/utils/hotkeys';
 import { exportCurrentBOM } from '@/utils/exportBom';
 
@@ -55,6 +56,7 @@ export default function App() {
       <ShortcutsHelp open={helpOpen} onClose={() => setHelpOpen(false)} />
       <HelpDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} />
       <OnboardingTooltip />
+      <ChatPanel />
     </div>
   );
 }

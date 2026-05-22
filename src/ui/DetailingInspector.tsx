@@ -1,4 +1,5 @@
 import { useStore } from '@/store/useStore';
+import { useAIStore } from '@/ai/store/ai-store';
 import { ConcreteGrade, RebarGrade, SeismicLevel } from '@/codes/rebar';
 import { parseBeamPingfa } from '@/parser/beamPingfa';
 import { validateBeam, validateColumn, validateWall } from '@/utils/validate';
@@ -25,21 +26,7 @@ export function DetailingInspector() {
         {kind === 'wall' && <WallPanel />}
 
         {/* 选中钢筋信息 */}
-        {sel && (
-          <section className="bg-primary/5 border border-primary/20 rounded p-4">
-            <div className="flex items-center gap-2 mb-2">
-              <Icon name="adjust" className="text-primary !text-[18px]" />
-              <span className="text-[11px] font-bold text-primary tracking-widest">
-                当前选中钢筋
-              </span>
-            </div>
-            <div className="space-y-1 text-[12px]">
-              <Row label="类型" value={sel.role} />
-              <Row label="规格" value={`${sel.grade} d${sel.diameter}`} />
-              <Row label="下料长度" value={`${sel.length} mm`} mono />
-            </div>
-          </section>
-        )}
+        {sel && <SelectedRebarCard sel={sel} />}
 
       </div>
 
@@ -749,41 +736,60 @@ function PingfaInput() {
   );
 }
 
-function AIPanel() {
+function SelectedRebarCard({
+  sel,
+}: {
+  sel: { role: string; length: number; diameter: number; grade: string };
+}) {
+  const setOpen = useAIStore((s) => s.setOpen);
+  const setPending = useAIStore((s) => s.setPendingInput);
+  const askAI = () => {
+    setPending(
+      `帮我解释当前选中的钢筋：${sel.role} (等级 ${sel.grade}, d=${sel.diameter}mm, 下料长度 ${sel.length}mm)。它的错固、构造要求是什么？根据 22G101 是否有问题？`
+    );
+    setOpen(true);
+  };
   return (
-    <div className="h-56 border-t border-outline-variant/20 flex flex-col bg-surface-container-lowest/40 shrink-0">
-      <div className="px-5 py-3 border-b border-outline-variant/5 flex items-center justify-between">
+    <section className="bg-primary/5 border border-primary/20 rounded p-4">
+      <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-2">
-          <Icon name="auto_awesome" className="text-tertiary !text-sm animate-pulse" />
-          <span className="text-[11px] font-bold text-on-surface-variant tracking-widest">
-            智能助手
+          <Icon name="adjust" className="text-primary !text-[18px]" />
+          <span className="text-[11px] font-bold text-primary tracking-widest">
+            当前选中钢筋
           </span>
         </div>
-        <div className="w-1.5 h-1.5 rounded-full bg-secondary shadow-[0_0_8px_#4edea3]" />
+        <button
+          onClick={askAI}
+          className="flex items-center gap-1 text-[10px] px-2 py-1 rounded bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 transition-colors"
+          title="让 AI 解释这根钢筋"
+        >
+          <Icon name="auto_awesome" className="!text-[12px]" />
+          问 AI
+        </button>
       </div>
-      <div className="flex-1 p-4 overflow-y-auto no-scrollbar">
-        <div className="flex gap-3">
-          <div className="w-7 h-7 rounded bg-tertiary/10 flex items-center justify-center shrink-0 border border-tertiary/20">
-            <Icon name="smart_toy" className="text-tertiary !text-[18px]" />
-          </div>
-          <div className="bg-surface-container-high/50 p-3 rounded text-[12px] leading-relaxed text-on-surface-variant border border-outline-variant/10">
-            建议：对当前梁支座区箍筋加密间距收紧到{' '}
-            <span className="text-primary font-mono">80mm</span>，提升延性。
-          </div>
-        </div>
+      <div className="space-y-1 text-[12px]">
+        <Row label="类型" value={sel.role} />
+        <Row label="规格" value={`${sel.grade} d${sel.diameter}`} />
+        <Row label="下料长度" value={`${sel.length} mm`} mono />
       </div>
-      <div className="p-3">
-        <div className="relative">
-          <input
-            type="text"
-            placeholder="提问结构性问题…"
-            className="w-full bg-surface-container border border-outline-variant/30 rounded pl-4 pr-10 py-2 text-xs focus:border-primary outline-none transition-colors"
-          />
-          <button className="absolute right-2 top-1.5 p-1 text-primary hover:bg-primary/10 rounded transition-colors">
-            <Icon name="send" className="!text-[20px]" />
-          </button>
-        </div>
-      </div>
+    </section>
+  );
+}
+
+function AIPanel() {
+  const togglePanel = useAIStore((s) => s.togglePanel);
+  return (
+    <div className="border-t border-outline-variant/20 bg-surface-container-lowest/40 shrink-0 p-3">
+      <button
+        onClick={togglePanel}
+        className="w-full flex items-center justify-center gap-2 py-2.5 rounded bg-gradient-to-r from-primary/15 to-tertiary/15 hover:from-primary/25 hover:to-tertiary/25 border border-primary/20 text-primary text-xs font-bold transition-colors"
+      >
+        <Icon name="auto_awesome" className="!text-[18px]" />
+        打开智筋 AI 助手
+      </button>
+      <p className="text-[10px] text-on-surface-variant/70 text-center mt-2">
+        基于 22G101-1 知识库 · 支持 DeepSeek / Kimi / 通义千问
+      </p>
     </div>
   );
 }
